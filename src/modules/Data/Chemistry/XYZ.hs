@@ -8,6 +8,7 @@ module Data.Chemistry.XYZ
 , coord2Mat
 , mat2Coord
 , interpolate
+--, align
 ) where
 import System.IO
 import Data.Attoparsec.Text.Lazy
@@ -101,11 +102,8 @@ mat2Coord a mat = XYZ { nAtoms = (nAtoms a)
                       }
     where
         content = zipWith (\e (x, y, z) -> (e, x, y, z)) (getElements a) coords
-        coords = (listList2TupleList . mat2ListList) mat
-        
-        mat2ListList :: BLAS.Matrix Double -> [[Double]]
-        mat2ListList mat_in = [BLAS.toList (mat_in BLAS.! i) | i <- [0 .. (BLAS.rows mat_in - 1)]]
-        
+        coords = (listList2TupleList . BLAS.toLists) mat
+                
         listList2TupleList :: [[Double]] -> [(Double, Double, Double)]
         listList2TupleList listlist = map (\[x,y,z] -> (x,y,z)) listlist
 
@@ -116,3 +114,55 @@ interpolate nImages mol1 mol2 = map (mat2Coord mol1) interpol_mats
         interpol_mats = [mol1_coordMat * ((1 BLAS.>< 1) [(1.0 - p)]) + mol2_coordMat * ((1 BLAS.>< 1) [p]) | p <- (BLAS.toList $ BLAS.linspace nImages (0, 1 :: Double))]
         mol1_coordMat = coord2Mat mol1
         mol2_coordMat = coord2Mat mol2
+
+-- align molecule by three atoms
+-- first goes to the origin
+-- second goes to the z axis
+-- third goes to the xz plane
+--ATTENTION --  Rotations not woring corrrectly!!
+align :: (Int, Int, Int) -> XYZ -> XYZ
+align (atom1, atom2, atom3) mol = mat2Coord mol mol_aligned
+    where
+        -- transform to matrix for easy algebra
+        mol_mat = coord2Mat mol
+        
+        -- translate so that atom 1 is in the origin
+        atom1_coords = mol_mat BLAS.! atom1
+        mol_1toOrigin = BLAS.fromRows $ [mol_mat BLAS.! ind - atom1_coords | ind <- [0 .. (BLAS.rows mol_mat - 1)]]
+        
+        -- rotate that atom 2 on Z-axis
+        -- first bring atom 2 to x = 0 by rotation around z
+        -- get coordinates from atom 2 and then the necessary angle for this rotation
+        atom2_coords = mol_1toOrigin BLAS.! atom2
+        x2 = atom2_coords BLAS.! 0
+        y2 = atom2_coords BLAS.! 1
+        rotAngleZ_2toX0 = 2 * atan((x2 - sqrt(x2**2 + y2**2)) / y2)
+        mat_rotZ_2toX0 = (3 BLAS.>< 3) [ cos rotAngleZ_2toX0, (-1) * sin rotAngleZ_2toX0, 0
+                                       , sin rotAngleZ_2toX0, cos rotAngleZ_2toX0       , 0
+                                       , 0                  , 0                         , 1
+                                       ]
+        mol_2toX0 = mol_1toOrigin BLAS.<> mat_rotZ_2toX0
+        -- second bring atom 2 also to z = 0 by rotation around x axis
+        atom2_coords_s = mol_2toX0 BLAS.! atom2
+        y2_s = atom2_coords_s BLAS.! 1
+        z2_s = atom2_coords_s BLAS.! 2
+        rotAngleX_2toY0 = (-2) * atan((z2_s + sqrt(y2_s**2 + z2_s**2)) / y2_s)
+        mat_rotX_2toY0 = (3 BLAS.>< 3) [ 1, 0                          , 0
+                                       , 0, cos rotAngleX_2toY0        , sin rotAngleX_2toY0
+                                       , 0, - (1) * sin rotAngleX_2toY0, cos rotAngleX_2toY0
+                                       ]
+        mol_2toY0 = mol_2toX0 BLAS.<> mat_rotX_2toY0
+        
+        -- rotate around z that atom 3 is in the xz plane
+        atom3_coords = mol_2toY0 BLAS.! atom3
+        x3 = atom3_coords BLAS.! 0
+        y3 = atom3_coords BLAS.! 1
+        rotAngleZ_3toY0 = 2 * atan((x3 - sqrt(x3**2 + y3**2)) / y3)
+        mat_rotZ_3toY0 = (3 BLAS.>< 3) [ cos rotAngleZ_3toY0, (-1) * sin rotAngleZ_3toY0, 0
+                                       , sin rotAngleZ_3toY0, cos rotAngleZ_3toY0       , 0
+                                       , 0                  , 0                         , 1
+                                       ]
+        mol_3toY0 = mol_2toY0 BLAS.<> mat_rotZ_3toY0
+        
+        -- define final aligned matrix
+        mol_aligned = mol_3toY0
