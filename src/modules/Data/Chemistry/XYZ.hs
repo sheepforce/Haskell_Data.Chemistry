@@ -8,7 +8,7 @@ module Data.Chemistry.XYZ
 , coord2Mat
 , mat2Coord
 , interpolate
---, align
+, align
 ) where
 import System.IO
 import Data.Attoparsec.Text.Lazy
@@ -119,7 +119,6 @@ interpolate nImages mol1 mol2 = map (mat2Coord mol1) interpol_mats
 -- first goes to the origin
 -- second goes to the z axis
 -- third goes to the xz plane
---ATTENTION --  Rotations not woring corrrectly!!
 align :: (Int, Int, Int) -> XYZ -> XYZ
 align (atom1, atom2, atom3) mol = mat2Coord mol mol_aligned
     where
@@ -136,33 +135,34 @@ align (atom1, atom2, atom3) mol = mat2Coord mol mol_aligned
         atom2_coords = mol_1toOrigin BLAS.! atom2
         x2 = atom2_coords BLAS.! 0
         y2 = atom2_coords BLAS.! 1
-        rotAngleZ_2toX0 = 2 * atan((x2 - sqrt(x2**2 + y2**2)) / y2)
+        rotAngleZ_2toX0 = (-2) * atan((y2 - sqrt(x2**2 + y2**2)) / x2)
         mat_rotZ_2toX0 = (3 BLAS.>< 3) [ cos rotAngleZ_2toX0, (-1) * sin rotAngleZ_2toX0, 0
                                        , sin rotAngleZ_2toX0, cos rotAngleZ_2toX0       , 0
-                                       , 0                  , 0                         , 1
-                                       ]
-        mol_2toX0 = mol_1toOrigin BLAS.<> mat_rotZ_2toX0
-        -- second bring atom 2 also to z = 0 by rotation around x axis
+                                       , 0                  , 0                         , 1]
+        mol_2toX0_vecs = map (mat_rotZ_2toX0 BLAS.#>) $ BLAS.toRows mol_1toOrigin
+        mol_2toX0 = BLAS.fromRows mol_2toX0_vecs
+        
+        -- second bring atom 2 to y = 0 by rotation around x
         atom2_coords_s = mol_2toX0 BLAS.! atom2
         y2_s = atom2_coords_s BLAS.! 1
         z2_s = atom2_coords_s BLAS.! 2
-        rotAngleX_2toY0 = (-2) * atan((z2_s + sqrt(y2_s**2 + z2_s**2)) / y2_s)
-        mat_rotX_2toY0 = (3 BLAS.>< 3) [ 1, 0                          , 0
-                                       , 0, cos rotAngleX_2toY0        , sin rotAngleX_2toY0
-                                       , 0, - (1) * sin rotAngleX_2toY0, cos rotAngleX_2toY0
-                                       ]
-        mol_2toY0 = mol_2toX0 BLAS.<> mat_rotX_2toY0
+        rotAngleX_2toY0 = (-2) * atan((z2_s - sqrt(y2_s**2 + z2_s**2)) / y2_s)
+        mat_rotX_2toY0 = (3 BLAS.>< 3) [ 1, 0, 0
+                                       , 0, cos rotAngleX_2toY0, (-1) * sin rotAngleX_2toY0
+                                       , 0, sin rotAngleX_2toY0, cos rotAngleX_2toY0]
+        mol_2toY0_vecs = map (mat_rotX_2toY0 BLAS.#>) $ BLAS.toRows mol_2toX0
+        mol_2toY0 = BLAS.fromRows mol_2toY0_vecs
         
-        -- rotate around z that atom 3 is in the xz plane
+        -- now that atom 2 is on the z axis, bring atom3 to XZ plane by rotation around z
         atom3_coords = mol_2toY0 BLAS.! atom3
         x3 = atom3_coords BLAS.! 0
         y3 = atom3_coords BLAS.! 1
-        rotAngleZ_3toY0 = 2 * atan((x3 - sqrt(x3**2 + y3**2)) / y3)
-        mat_rotZ_3toY0 = (3 BLAS.>< 3) [ cos rotAngleZ_3toY0, (-1) * sin rotAngleZ_3toY0, 0
-                                       , sin rotAngleZ_3toY0, cos rotAngleZ_3toY0       , 0
-                                       , 0                  , 0                         , 1
-                                       ]
-        mol_3toY0 = mol_2toY0 BLAS.<> mat_rotZ_3toY0
+        rotAngleZ_3toY0 = (-2) * atan((y3 - sqrt(x3**2 + y3**2)) / x3)
+        mat_rotZ_3toY0 = (3 BLAS.>< 3) [ cos rotAngleZ_3toY0 , (-1) * sin rotAngleZ_3toY0 , 0
+                                       , sin rotAngleZ_3toY0 , cos rotAngleZ_3toY0        , 0
+                                       , 0                   , 0                          , 1]
+        mol_3toY0_vecs = map (mat_rotZ_3toY0 BLAS.#>) $ BLAS.toRows mol_2toY0
+        mol_3toY0 = BLAS.fromRows mol_3toY0_vecs
         
-        -- define final aligned matrix
+        -- give the final rotated structure
         mol_aligned = mol_3toY0
