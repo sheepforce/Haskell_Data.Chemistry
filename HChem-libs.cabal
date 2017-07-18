@@ -1,0 +1,21 @@
+Name:		HChem-libs
+Version:	0.1
+Cabal-Version:  >= 1.2
+License:	GPL-3
+License-File:	LICENSE
+Author:		Phillip Seeber
+Homepage:	https://github.com/sheepforce/Haskell_Data.Chemistry
+Category:	Chemistry
+Synopsis:	Handling chemical data formats
+
+Library
+  Build-Depends:
+    base,
+    attoparsec,
+    hmatrix>=0.18
+  Exposed-modules:
+    Data.Chemistry.XYZ
+  hs-source-dirs:
+    src/modules
+  ghc-options:
+    -Wall -O2

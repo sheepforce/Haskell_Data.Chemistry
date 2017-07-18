@@ -19,7 +19,10 @@ data.chemistry.xyz:
 	cd src/modules/Data/Chemistry && $(HC) -i$(HINCLUDE) $(HFLAGS) --make XYZ.hs 
 
 # cleaning
-clean: clean_data.chemistry.xyz
+clean: clean_cabal clean_data.chemistry.xyz
+
+clean_cabal:
+	rm -rf dist
 
 clean_data.chemistry.xyz:
 	cd src/modules/Data/Chemistry && rm -f *.hi *.o
