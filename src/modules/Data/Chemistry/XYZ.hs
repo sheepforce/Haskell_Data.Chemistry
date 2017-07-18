@@ -1,6 +1,7 @@
 module Data.Chemistry.XYZ
 ( XYZ(..)
 , xyzParser
+, xyzTrajParser
 , getNAtoms
 , getElements
 , getCoords
@@ -36,9 +37,9 @@ xyzParser = do
   _ <- many' $ char ' '
   _ <- endOfLine
   comment_parse <- manyTill anyChar endOfLine
-  -- coordinates <- many' xyzCoordLineParser <* (endOfLine <|> endOfInput)
-  coordinates <- many' xyzCoordLineParser
-  _ <- endOfInput
+  --coordinates <- many' xyzCoordLineParser
+  coordinates <- count nAtoms_parse xyzCoordLineParser
+  -- _ <- endOfLine <|> endOfInput
   return $ XYZ { nAtoms = nAtoms_parse
                , comment = comment_parse
                , xyzcontent = coordinates
@@ -58,6 +59,10 @@ xyzParser = do
         _ <- many' endOfLine
         return $ (element,x,y,z)
 
+xyzTrajParser :: Parser [XYZ]
+xyzTrajParser = do
+    trajectory <- many' xyzParser
+    return $ trajectory
 
 {- ################################ -}
 {- Functions to work with XYZ files -}
