@@ -13,19 +13,23 @@ HINCLUDE	= src/modules
 .PHONY: libs
 all: libs
 
-libs: data.chemistry.xyz
+libs: data.chemistry.xyz data.chemistry.basisset
 
 data.chemistry.xyz:
 	cd src/modules/Data/Chemistry && $(HC) -i$(HINCLUDE) $(HFLAGS) --make XYZ.hs 
 
+data.chemistry.basisset:
+	cd src/modules/Data/Chemistry && $(HC) -i$(HINCLUDE) $(HFLAGS) --make BasisSet.hs 
+
 # cleaning
-clean: clean_cabal clean_data.chemistry.xyz
+clean: clean_cabal clean_data.chemistry
 
 clean_cabal:
 	rm -rf dist
 
-clean_data.chemistry.xyz:
+clean_data.chemistry:
 	cd src/modules/Data/Chemistry && rm -f *.hi *.o
+
 
 # installation
 install: install_data.chemistry.xyz

@@ -1,5 +1,5 @@
 Name:		HChem-libs
-Version:	0.1
+Version:	0.2
 Cabal-Version:  >= 1.2
 License:	GPL-3
 License-File:	LICENSE
@@ -13,9 +13,11 @@ Library
   Build-Depends:
     base,
     attoparsec,
+    text,
     hmatrix>=0.18
   Exposed-modules:
-    Data.Chemistry.XYZ
+    Data.Chemistry.XYZ,
+    Data.Chemistry.BasisSet
   hs-source-dirs:
     src/modules
   ghc-options:
