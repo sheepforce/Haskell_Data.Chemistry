@@ -5,13 +5,9 @@ module Data.Chemistry.BasisSet
 , printBagelBasisList
 ) where
 import qualified Data.Text as T
---import qualified Data.Text.IO as T
 import Data.Attoparsec.Text.Lazy
 import System.IO
---import System.Environment
 import Control.Applicative
---import Data.Maybe
---import Data.Either.Unwrap
 import Text.Printf
 
 
@@ -62,29 +58,30 @@ nwSingleBasisParser = do
            return $ Basis { element = "X"
                           , basFuns = [ConGauss {angMom = 0, expoCoeff_pairs = [(0.0, 0.0)]}]
                           }
-           
---parse o complete block of a contracted gaussian
--- SP and other contractions as in the pople basis sets are recognized and flattened
--- general contractions are also recognized and flattened
--- example:
+
 {-
+parse o complete block of a contracted gaussian
+SP and other contractions as in the pople basis sets are recognized and flattened
+general contractions are also recognized and flattened
+example:
 C    S
    3047.5249000              0.0018347 
     457.3695100              0.0140373
--}
--- would give ("C", [ConGauss {angMom = 0, expoCoeff_pairs = [(3047.5249000, 0.0018347), (457.3695100, 0.0140373)]}])
--- example:
-{-
+
+would give ("C", [ConGauss {angMom = 0, expoCoeff_pairs = [(3047.5249000, 0.0018347), (457.3695100, 0.0140373)]}])
+
+example:
 C    SP
       7.8682724             -0.1193324              0.0689991        
--}
--- would give ("C", [ConGauss {angMom = 0, expoCoeff_pairs = [(7.8682724, -0.1193324)]}, ConGauss {angMom = 1, expoCoeff_pairs = [(7.8682724, 0.0689991)]}])
--- example:
-{-
+
+would give ("C", [ConGauss {angMom = 0, expoCoeff_pairs = [(7.8682724, -0.1193324)]}, ConGauss {angMom = 1, expoCoeff_pairs = [(7.8682724, 0.0689991)]}])
+
+example:
 C    S
       0.1687144              1.0000000              2.0000000  
+
+would give ("C", [ConGauss {angMom = 1, expoCoeff_pairs = [(0.1687144, 1.0)], ConGauss {angMom = 0, expoCoeff_pairs = [(0.1687144,1.0)]}])
 -}
--- would give ("C", [ConGauss {angMom = 1, expoCoeff_pairs = [(0.1687144, 1.0)], ConGauss {angMom = 0, expoCoeff_pairs = [(0.1687144,1.0)]}])
 nwConGaussParser :: Parser (String, [ConGauss])
 nwConGaussParser = do
     atom <- manyTill anyChar (char ' ')
@@ -97,14 +94,14 @@ nwConGaussParser = do
                                  then do
                                      let expoList = map fst expoCoeffs_pairs_raw
                                          coeffList = concat . (map snd) $ expoCoeffs_pairs_raw
-                                     return $ [ ConGauss { angMom = orb2AngMom (head angMom_raw)
+                                     return $ [ ConGauss { angMom = orb2AngMom $ head angMom_raw
                                                          , expoCoeff_pairs = zip expoList coeffList
                                                          }
                                               ]
                                  else do
                                      let expoList = map fst expoCoeffs_pairs_raw
                                          manyCoeffList = map snd expoCoeffs_pairs_raw
-                                     return $ [ ConGauss { angMom = orb2AngMom (head angMom_raw)
+                                     return $ [ ConGauss { angMom = orb2AngMom $ head angMom_raw
                                                          , expoCoeff_pairs = zip expoList (map (!! ind) manyCoeffList)
                                                          }
                                                 | ind <- [0..(length (head manyCoeffList) - 1)]
@@ -120,12 +117,13 @@ nwConGaussParser = do
                                        ]
     return $ (atom, conGauss_list)
 
--- parse single line of gaussians in NWChem style
--- example:
 {-
+parse single line of gaussians in NWChem style
+example:
       exponent1             coefficient1a              coefficient1b
+
+would give (exponent, [coefficient1a, coefficient1b])
 -}
--- would give (exponent, [coefficient1a, coefficient1a])
 nwConGaussLineParser :: Parser (Double, [Double])
 nwConGaussLineParser = do
     _ <- many' (char ' ')
@@ -133,8 +131,8 @@ nwConGaussLineParser = do
     _ <- many' (char ' ')
     coefflist <- many1 coeffparser
     endOfLine
-    let expoCoeff_pairs = (expo, coefflist)
-    return $ expoCoeff_pairs
+    let pairs = (expo, coefflist)
+    return $ pairs
     where
         coeffparser :: Parser Double
         coeffparser = do
@@ -157,6 +155,7 @@ orb2AngMom orb
     | orb == 'h' || orb == 'h' = 5
     | orb == 'i' || orb == 'i' = 6
     | orb == 'j' || orb == 'j' = 7
+    | otherwise = error "not supported angular momentum"
 
 -- angular momentum to orbital
 angMom2Orb :: Int -> Char
@@ -169,8 +168,10 @@ angMom2Orb angmom
     | angmom == 5 = 'h'
     | angmom == 6 = 'i'
     | angmom == 7 = 'j'
+    | otherwise = error "not supported angular momentum"
 
 -- give a element and a list. Checks if every element in this list ist the given element    
+allequal :: (Eq a) => a -> [a] -> Bool
 allequal e elist = foldl (\acc x -> if x /= e then False else acc) True elist
 
 
@@ -181,53 +182,58 @@ allequal e elist = foldl (\acc x -> if x /= e then False else acc) True elist
 printBagelBasisList :: Handle -> [Basis] -> IO ()
 printBagelBasisList handle basises = do
     hPrintf handle "%s\n" $ "{"
-    printBasisList handle basises
+    printBasisList {-handle-} basises
     hPrintf handle "\n%s\n" $ "}"
     where
-        printBasisList :: Handle -> [Basis] -> IO ()
-        printBasisList handle [] = return ()
-        printBasisList handle [a] = printBasis handle a
-        printBasisList handle (a:b) = do
-            printBasis handle a
+        -- print a list of basises to json, but omit the top level braces
+        printBasisList :: {-Handle ->-} [Basis] -> IO ()
+        printBasisList {-handle-} [] = return ()
+        printBasisList {-handle-} [a] = printBasis {-handle-} a
+        printBasisList {-handle-} (a:b) = do
+            printBasis {-handle-} a
             hPrintf handle "%s\n" $ ","
-            printBasisList handle b
+            printBasisList {-handle-} b
         
-        printBasis :: Handle -> Basis -> IO ()
-        printBasis handle basis = do
+        -- print the basis of a single element but avoid braces of higher levels
+        printBasis :: {-Handle ->-} Basis -> IO ()
+        printBasis {-handle-} basis = do
             hPrintf handle "  %s\n"  $ "\"" ++ element basis ++ "\" : ["
-            printConGaussList handle $ basFuns basis
+            printConGaussList {-handle-} $ basFuns basis
             hPrintf handle "\n  %s"    $ "]"
         
-        printConGaussList :: Handle -> [ConGauss] -> IO ()
-        printConGaussList handle []    = return ()
-        printConGaussList handle [a]   = printConGauss handle a
-        printConGaussList handle (a:b) = do
-            printConGauss handle a
+        -- print the contracted gaussians but not the element or braces of higher levels
+        printConGaussList :: {-Handle ->-} [ConGauss] -> IO ()
+        printConGaussList {-handle-} []    = return ()
+        printConGaussList {-handle-} [a]   = printConGauss {-handle-} a
+        printConGaussList {-handle-} (a:b) = do
+            printConGauss {-handle-} a
             hPrintf handle "%s\n" $ ","
-            printConGaussList handle b
+            printConGaussList {-handle-} b
         
-        printConGauss :: Handle -> ConGauss -> IO ()
-        printConGauss handle congauss  = do
+        -- print a single contracted gaussian in json/Bagel format but not braces of higher levels
+        printConGauss :: {-Handle ->-} ConGauss -> IO ()
+        printConGauss {-handle-} congauss  = do
             -- print opening brace
             hPrintf handle "    %s\n"     $ "{"
             -- print angular momentum
             hPrintf handle "      %s\n"   $ "\"angular\" : \"" ++ [(angMom2Orb $ angMom congauss)] ++ "\","
             -- print exponents of the primitve gaussians
             hPrintf handle "      %s"     $ "\"prim\" : ["
-            printDoubleList handle (map fst $ expoCoeff_pairs congauss)
+            printDoubleList {-handle-} (map fst $ expoCoeff_pairs congauss)
             hPrintf handle "%s\n"         $ "],"
             -- print contraction coefficients
             hPrintf handle "      %s"     $ "\"cont\" : [["
-            printDoubleList handle (map snd $ expoCoeff_pairs congauss)
+            printDoubleList {-handle-} (map snd $ expoCoeff_pairs congauss)
             hPrintf handle "%s\n"         $ "]]"
             -- print closing brace
             hPrintf handle "    %s"       $ "}"
         
-        printDoubleList :: Handle -> [Double] -> IO ()
-        printDoubleList handle []    = return ()
-        printDoubleList handle [a]   = hPrintf handle "%.7F" a
-        printDoubleList handle (a:b) = do
+        -- print a list of doubles with 7 decimals precision as it would look in haskell and json
+        printDoubleList :: {-Handle ->-} [Double] -> IO ()
+        printDoubleList {-handle-} []    = return ()
+        printDoubleList {-handle-} [a]   = hPrintf handle "%.7F" a
+        printDoubleList {-handle-} (a:b) = do
             hPrintf handle "%.7F, " a
-            printDoubleList handle b
+            printDoubleList {-handle-} b
         
 
