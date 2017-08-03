@@ -35,7 +35,8 @@ data ConGauss = ConGauss { angMom          :: Int
 -- parse complete basis set file
 nwBasisParser :: Parser [Basis]
 nwBasisParser = do
-    _ <- string $ T.pack "BASIS \"ao basis\" PRINT"
+    _ <- manyTill anyChar (string $ T.pack "BASIS \"ao basis\" PRINT")
+    --_ <- string $ T.pack "BASIS \"ao basis\" PRINT"
     endOfLine
     basises <- many1 nwSingleBasisParser
     _ <- string $ T.pack "END"
