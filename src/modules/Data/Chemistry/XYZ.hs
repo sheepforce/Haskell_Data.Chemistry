@@ -8,6 +8,8 @@ module Data.Chemistry.XYZ
 , printXYZ
 , coord2Mat
 , mat2Coord
+, coord2Vec
+, vec2Coord
 , interpolate
 , align
 ) where
@@ -111,6 +113,25 @@ mat2Coord a mat = XYZ { nAtoms = (nAtoms a)
                 
         listList2TupleList :: [[Double]] -> [(Double, Double, Double)]
         listList2TupleList listlist = map (\[x,y,z] -> (x,y,z)) listlist
+
+-- generate HMatrix Vector of coordinates
+coord2Vec :: XYZ -> BLAS.Vector Double
+coord2Vec a = BLAS.fromList $ concat . map (\(x, y, z) -> [x, y, z]) $ getCoords a
+
+-- take a HMatrix Vector representing coordinates and convert to XYZ
+vec2Coord :: XYZ -> BLAS.Vector Double -> XYZ
+vec2Coord a vec = XYZ { nAtoms = (nAtoms a)
+                      , comment = (comment a)
+                      , xyzcontent = content
+                      }
+    where
+        content = zipWith (\e (x, y, z) -> (e, x, y, z)) (getElements a) coords
+        coords = list2tuple3 plainListcoords
+        plainListcoords = BLAS.toList vec
+        
+        list2tuple3 :: [b] -> [(b, b, b)]
+        list2tuple3 b = [(b !! (ind + 0), b !! (ind + 1), b !! (ind + 2)) | ind <- [0, 3 .. (length b - 1)]]
+        
 
 -- interpolate two geometries in cartesian coordinates
 interpolate :: Int -> XYZ -> XYZ -> [XYZ]
