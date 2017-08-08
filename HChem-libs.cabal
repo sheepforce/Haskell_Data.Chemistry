@@ -14,12 +14,14 @@ Library
     base,
     attoparsec,
     text,
-    hmatrix>=0.18
+    hmatrix>=0.18,
+    hmatrix-gsl
   Exposed-modules:
     Data.Chemistry.XYZ,
     Data.Chemistry.BasisSet,
     Data.Chemistry.QC,
-    Data.Chemistry.QC.Psi4
+    Data.Chemistry.QC.Psi4,
+    Data.Chemistry.QC.Potential
   hs-source-dirs:
     src/modules
   ghc-options:

@@ -23,7 +23,7 @@ data.chemistry.basisset:
 
 data.chemistry.qc:
 	cd src/modules/Data/Chemistry &&  $(HC) -i$(HINCLUDE) $(HFLAGS) --make QC.hs
-	cd src/modules/Data/Chemistry/QC && $(HC) -i$(HINCLUDE) $(HFLAGS) --make Psi4.hs
+	cd src/modules/Data/Chemistry/QC && $(HC) -i$(HINCLUDE) $(HFLAGS) --make Psi4.hs Potential.hs
 
 # cleaning
 clean: clean_cabal clean_data.chemistry

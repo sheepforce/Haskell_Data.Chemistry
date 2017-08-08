@@ -81,7 +81,7 @@ psi4InputParser = do
             return $ (element_p, xp, yp, zp)
     
 
-psi4GradientParser :: Parser (BLAS.Matrix Double)
+psi4GradientParser :: Parser (BLAS.Vector Double)
 psi4GradientParser = do
     _ <- manyTill anyChar ((string $ T.pack "-Total Gradient:") <|> (string $ T.pack "-Total gradient:"))
     skipSpace
@@ -90,9 +90,9 @@ psi4GradientParser = do
     _ <- string (T.pack "------   -----------------  -----------------  -----------------")
     skipSpace
     atomgrads <- many' gradientLineParser
-    return $ BLAS.fromRows atomgrads
+    return $ BLAS.fromList $ concat atomgrads
     where
-        gradientLineParser :: Parser (BLAS.Vector Double)
+        gradientLineParser :: Parser [Double]
         gradientLineParser = do
             skipSpace
             _ <- (decimal :: Parser Int)
@@ -103,7 +103,7 @@ psi4GradientParser = do
             skipSpace
             gz <- double
             endOfLine
-            return $ BLAS.fromList [gx, gy, gz]
+            return $ [gx, gy, gz]
 
 
 {- ############ -}
