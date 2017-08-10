@@ -14,8 +14,10 @@ Library
     base,
     attoparsec,
     text,
+    process,
+    either-unwrap,
     hmatrix>=0.18,
-    hmatrix-gsl
+    hmatrix-gsl    
   Exposed-modules:
     Data.Chemistry.XYZ,
     Data.Chemistry.BasisSet,

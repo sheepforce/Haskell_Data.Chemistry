@@ -1,18 +1,23 @@
 module Data.Chemistry.QC.Psi4
 ( Psi4Input(..)
 , psi4InputParser
+, psi4EnergyParser
 , psi4GradientParser
-, replacePsiGeom
+, writePsiInput
+, calcPsiEnergy
+, calcPsiGradient
 ) where
 import System.IO
+import System.IO.Unsafe
+import System.Process
 import Control.Applicative
 import Data.Attoparsec.Text.Lazy
 import qualified Data.Text as T
---import qualified Data.Text.IO as T
+import qualified Data.Text.IO as T
 import Text.Printf
 import qualified Numeric.LinearAlgebra as BLAS
 import qualified Data.Chemistry.XYZ as XYZ
---import Data.Either.Unwrap
+import Data.Either.Unwrap
 
 
 {- ########## -}
@@ -79,7 +84,28 @@ psi4InputParser = do
             zp <- double
             skipSpace
             return $ (element_p, xp, yp, zp)
+
+psi4EnergyParser :: Parser Double
+psi4EnergyParser = do
+    energies <- many1 psiInterEnergyParser
+    return $ last energies
     
+    where
+        psiInterEnergyParser :: Parser Double
+        psiInterEnergyParser = do
+            manyTill anyChar (energyString)
+            energy <- double
+            return $ energy
+        
+        energyString :: Parser ()
+        energyString = do
+            _ <- string $ T.pack "Total "
+            _ <- manyTill anyChar ((string $ T.pack "Energy") <|> (string $ T.pack "energy"))
+            skipSpace
+            char '='
+            skipSpace
+            return ()
+        
 
 psi4GradientParser :: Parser (BLAS.Vector Double)
 psi4GradientParser = do
@@ -110,8 +136,8 @@ psi4GradientParser = do
 {- IO Functions -}
 {- ############ -}
 
-replacePsiGeom :: Handle -> Psi4Input -> IO ()
-replacePsiGeom handle psi4 = do
+writePsiInput :: Handle -> Psi4Input -> IO ()
+writePsiInput handle psi4 = do
     hPrintf handle "%s "      $ "memory"
     hPrintf handle "%d "      $ fst . memory $ psi4
     hPrintf handle "%s\n\n"   $ snd . memory $ psi4
@@ -127,4 +153,53 @@ replacePsiGeom handle psi4 = do
         hPrintf handle "%+16.8f\n"   z) (XYZ.xyzcontent . molecule $ psi4)
     hPrintf handle "%s\n"     $ "}"
     hPutStrLn handle          $ inputopts psi4
+
+calcPsiEnergy :: Psi4Input -> String -> FilePath -> Int -> Double
+calcPsiEnergy psiMolecule filePrefix psiPath threads = unsafePerformIO $ do
+    let psi4_inputName = (filePrefix ++ "_energy.psi")
+        psi4_outputName = (filePrefix ++ "_energy.out")
     
+    -- write an input for QC software
+    psi4InputHandle <- openFile psi4_inputName WriteMode
+    writePsiInput psi4InputHandle psiMolecule
+    hClose psi4InputHandle
+    
+    -- call psi4 and write output
+    psiLogging <- readProcess psiPath ["-n", show threads, "-i", psi4_inputName, "-o", psi4_outputName] ""
+    
+    -- read the output and parse it
+    psi4Output <- T.readFile psi4_outputName
+    let energy_parsed = parseOnly psi4EnergyParser psi4Output
+    
+    -- if no parse possible, raise an error beacuse this means the calculation did not work
+    energy <- if (isLeft energy_parsed)
+       then error $ "calculation did not converge. Please check the psi4 output\n" ++ psiLogging
+       else return $ fromRight energy_parsed
+    
+    -- return the energy from Psi4
+    return energy
+
+calcPsiGradient :: Psi4Input -> String -> FilePath -> Int -> BLAS.Vector Double
+calcPsiGradient psiMolecule filePrefix psiPath threads = unsafePerformIO $ do
+    let psi4_inputName = (filePrefix ++ "_gradient.psi")
+        psi4_outputName = (filePrefix ++ "_gradient.out")
+    
+    -- write an input for QC software
+    psi4InputHandle <- openFile psi4_inputName WriteMode
+    writePsiInput psi4InputHandle psiMolecule
+    hClose psi4InputHandle
+    
+    -- call psi4 and write output
+    psiLogging <- readProcess psiPath ["-n", show threads, "-i", psi4_inputName, "-o", psi4_outputName] ""
+    
+    -- read the output and parse it
+    psi4Output <- T.readFile psi4_outputName
+    let gradient_parsed = parseOnly psi4GradientParser psi4Output
+    
+    -- if no parse possible, raise an error beacuse this means the calculation did not work
+    gradient <- if (isLeft gradient_parsed)
+       then error $ "calculation did not converge. Please check the psi4 output\n" ++ psiLogging
+       else return $ fromRight gradient_parsed
+    
+    -- return the gradient from Psi4
+    return gradient
