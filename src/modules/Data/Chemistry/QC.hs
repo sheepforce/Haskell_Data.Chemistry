@@ -333,6 +333,7 @@ ridge_optimization ::
     Int ->                                          -- number of images between product and educt to search for maximum on this path. 1 would be a simple mid point guess
     Int ->                                          -- maximum number of macro iterations
     Int ->                                          -- maximum number of micro iterations
+    Double ->                                       -- side step size ||p|| from the paper for building x0' and x1'
     Double ->                                       -- step size for outer steps (alpha)
     Double ->                                       -- step size for inner steps (trust)
     Double ->                                       -- initial step size micro iterations
@@ -359,6 +360,7 @@ ridge_optimization
                                                     -- give a 1 if you want to use the midpoint as a guess and hopefully save 
     maxIterOuter                                    -- maximum number of outer (complete ridge) iterations
     maxIterInner                                    -- maximum number if micro iterations for finding the maximum on the path
+    outerSideStepSize                               -- side step size ||p|| from the paper for building x0' and x1'
     outerStepSize                                   -- the alpha from the paper, how large the relaxation shall be
     innerTrust                                      -- trust value of the GSL BFGS or SteepestDescent algorithm
     innerConv                                       -- convergence value of the BFGS
@@ -519,13 +521,19 @@ ridge_optimization
                       XYZ.printXYZ stdout (XYZ.vec2Coord genericXYZ projected_maximum)
                   else return ()
                
+               -- make the neighbouring points x0' and x1'
+               let x0' = projected_maximum + (BLAS.vector [outerSideStepSize]) * educt_product_vector
+                   x1' = projected_maximum - (BLAS.vector [outerSideStepSize]) * educt_product_vector               
+               
                -- calculate the lambda parameter of the location of x*
-               let projected_maximum_lambda = (vecLength (maxPath_maxGeom - educt)) / (vecLength educt_product_vector)
+               let projected_maximum_lambda = (vecLength (projected_maximum - educt)) / (vecLength educt_product_vector)
                if (verbosity == Medium || verbosity == High || verbosity == Debug)
                   then do
-                      putStrLn                          $ "        lambda (x*) : " ++ show projected_maximum_lambda
+                      putStrLn                          $ "                                                                "
+                      putStrLn                          $ "        lambda'(x*) is the position of the projected maximum    "
+                      putStrLn                          $ "        on the educt (0) -> product (1) path                    "
+                      putStrLn                          $ "            lambda'(x*) : " ++ show projected_maximum_lambda
                   else return ()
-                
            else do 
                putStrLn                                 $ " "
     

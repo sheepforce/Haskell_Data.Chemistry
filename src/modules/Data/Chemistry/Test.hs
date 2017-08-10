@@ -28,6 +28,9 @@ let product_vec = XYZ.coord2Vec product_xyz
 template_text <- T.readFile "/home/phillip/Template.psi"
 let template = T.unpack template_text
 
+ridge_optimization elements educt_vec product_vec 1 (-1) 21 2 50 0.05 0.05 0.1 1.0e-6 0.02 (1.0e-4, 5.0e-4) (Psi4, template) BFGS2 4 Debug 0 [] []
+
+
 -- test the matrix printing function
 lAK = BLAS.vector [-200, -100, -170, 15]
 ak = BLAS.vector [-1, -1, -6.5, 0.7]
