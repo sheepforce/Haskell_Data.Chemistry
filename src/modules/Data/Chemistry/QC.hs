@@ -55,9 +55,9 @@ data QcInMolecule = QcInMolecule { name :: String
 
 -- representing a point on the PES with local informations (energy, gradient, hessian)
 data PESPoint = PESPoint { loc_geom :: BLAS.Vector Double               -- geometry of this point
-                         , loc_energy :: Double                         -- electronic energy
-                         , loc_gradient :: Maybe (BLAS.Vector Double)     -- nuclear gradient
-                         , loc_hessian :: Maybe (BLAS.Matrix Double)      -- nuclear hessian at this point
+                         , loc_energy :: Maybe Double                   -- electronic energy
+                         , loc_gradient :: Maybe (BLAS.Vector Double)   -- nuclear gradient
+                         , loc_hessian :: Maybe (BLAS.Matrix Double)    -- nuclear hessian at this point
                          } deriving Show
 
 -- representing the three points of one ridge iterations as points on the PES
@@ -315,8 +315,6 @@ solutionMatrixPrint verbosity handle xyzTemplate solMat = do
                hPrintf handle "%12d | "                 $ (round :: Double -> Int) (e !! 0)
                hPrintf handle "%11.7F \n"               $ negate (e !! 1)
                  ) solList
-    
-
 
 {-
 implementation of the ridge algorithm
@@ -412,7 +410,20 @@ ridge_optimization
                                            }
                    educt_xyz = XYZ.vec2Coord educt_temp_xyz educt
                    prod_xyz = XYZ.vec2Coord prod_temp_xyz prod
-                   
+               
+               
+               putStrLn                                 $ "       ____                                                   "
+               putStrLn                                 $ "      < Hi >                                                  "
+               putStrLn                                 $ "       ----                                                   "
+               putStrLn                                 $ "       \\                                                     "
+               putStrLn                                 $ "        \\                                                    "
+               putStrLn                                 $ "            __                                               "
+               putStrLn                                 $ "           UooU\\.'@@@@@@`.                                  "
+               putStrLn                                 $ "           \\__/(@@@@@@@@@@)                                  "
+               putStrLn                                 $ "                 (@@@@@@@@)                                   "
+               putStrLn                                 $ "                 `YY~~~~YY'                                   "
+               putStrLn                                 $ "                  ||    ||                                    "
+               putStrLn                                 $ "                                                              "    
                putStrLn                                 $ "          RIDGE OPTIMIZATION                                  "
                putStrLn                                 $ "                                                              "
                putStrLn                                 $ "                                                              "
@@ -460,7 +471,7 @@ ridge_optimization
                    -- calculate the energies of the images
                    maxPath_energies = map (energy_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_MaximumPathGRAD") programmPath threads) maxPath_images
                    -- make this a list of PESPoint
-                   maxPath_PES = [makePesPoint (maxPath_images !! ind) (maxPath_energies !! ind) Nothing Nothing | ind <- [0 .. (length maxPath_images - 1)]]
+                   maxPath_PES = [makePesPoint (maxPath_images !! ind) (Just (maxPath_energies !! ind)) Nothing Nothing | ind <- [0 .. (length maxPath_images - 1)]]
                
                -- print informations about the interpolated images
                if (verbosity == Debug)
@@ -475,7 +486,7 @@ ridge_optimization
                       putStrLn                          $ "    energies of the interpolated images                       "
                       mapM_ (\e -> do
                           putStr "        "
-                          print e) $ (map loc_energy) maxPath_PES
+                          print e) $ (map fromJust) . (map loc_energy) $ maxPath_PES
                       putStrLn                          $ "                                                              "
                   else return ()
                
@@ -505,8 +516,12 @@ ridge_optimization
                                                 (negate . energy_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_MaximumPathMicroIter") programmPath threads)
                                                 (negate . (vectorProjection educt_product_vector) . gradient_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_MaximumPathMicroIter") programmPath threads)
                                                 maxPath_maxGeom
-                   projected_maximum = fst projected_optimization
+                   projected_maximum_geom = fst projected_optimization
                    projected_optimization_history = snd projected_optimization
+                   
+                   -- calculate the gradient at x*
+                   projected_maximum_energy = energy_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_xs") programmPath threads projected_maximum_geom
+                   projected_maximum_grad = gradient_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_xs") programmPath threads projected_maximum_geom
                
                if (verbosity == Medium || verbosity == High || verbosity == Debug)
                   then do
@@ -517,24 +532,309 @@ ridge_optimization
                          else return ()
                       
                       putStrLn                          $ "                                                                "
-                      putStrLn                          $ "        found projected maximum x* at                           "
-                      XYZ.printXYZ stdout (XYZ.vec2Coord genericXYZ projected_maximum)
+                      putStrLn                          $ "        found projected maximum x* with energy                  "
+                      putStr                            $ "             "
+                      putStrLn                          $ show projected_maximum_energy
+                      putStrLn                          $ "                                                                "
+                      putStrLn                          $ "        at a geometry of                                        "
+                      XYZ.printXYZ stdout (XYZ.vec2Coord genericXYZ projected_maximum_geom)
+                      putStrLn                          $ "                                                                "
+                      putStrLn                          $ "        and gradient at x*                                      "
+                      mapM_ (\(x, y, z) -> do
+                          hPrintf stdout "%+16.8f    " x
+                          hPrintf stdout "%+16.8f    " y
+                          hPrintf stdout "%+16.8f\n"   z) $ list2tuple3 . BLAS.toList $ projected_maximum_grad
+                      putStrLn                          $ "                                                                "
                   else return ()
                
                -- make the neighbouring points x0' and x1'
-               let x0' = projected_maximum + (BLAS.vector [outerSideStepSize]) * educt_product_vector
-                   x1' = projected_maximum - (BLAS.vector [outerSideStepSize]) * educt_product_vector               
+               let x0' = projected_maximum_geom + (BLAS.vector [outerSideStepSize]) * educt_product_vector
+                   x1' = projected_maximum_geom - (BLAS.vector [outerSideStepSize]) * educt_product_vector
+               
+               if (verbosity == High || verbosity == Debug)
+                  then do
+                      putStrLn                          $ "    generating initially x0' and x1'                            "
+                      putStrLn                          $ "        x0' now at                                              "
+                      XYZ.printXYZ stdout (XYZ.vec2Coord genericXYZ x0')
+                      putStrLn                          $ "                                                                "
+                      putStrLn                          $ "        x1' now at                                              "
+                      XYZ.printXYZ stdout (XYZ.vec2Coord genericXYZ x1')
+                      putStrLn                          $ "                                                                "
+                  else return ()
+                      
                
                -- calculate the lambda parameter of the location of x*
-               let projected_maximum_lambda = (vecLength (projected_maximum - educt)) / (vecLength educt_product_vector)
+               let projected_maximum_lambda = (vecLength (projected_maximum_geom - educt)) / (vecLength educt_product_vector)
                if (verbosity == Medium || verbosity == High || verbosity == Debug)
                   then do
                       putStrLn                          $ "                                                                "
                       putStrLn                          $ "        lambda'(x*) is the position of the projected maximum    "
                       putStrLn                          $ "        on the educt (0) -> product (1) path                    "
                       putStrLn                          $ "            lambda'(x*) : " ++ show projected_maximum_lambda
+                      putStrLn                          $ "                                                                "
+                      putStrLn                          $ "                                                                "
                   else return ()
-           else do 
-               putStrLn                                 $ " "
-    
-    
+               
+               
+
+               
+               
+               -- make a ridge
+               let ridge_zero = Ridge { ridge_xs = makePesPoint projected_maximum_geom (Just projected_maximum_energy) (Just projected_maximum_grad) Nothing
+                                      , ridge_x0 = makePesPoint x0' Nothing Nothing Nothing
+                                      , ridge_x1 = makePesPoint x1' Nothing Nothing Nothing
+                                      }
+               
+               putStrLn                                 $ "@    iteraration |  energy(x*)  | rms_grad(x*) | max_grad(x*) | lambda(x*) "
+               putStrLn                                 $ "@   -------------|--------------|--------------|--------------|------------"
+               printf "@    %11d | %11.7f | %12.7f | %12.7f | %10.6f \n" 
+                                                                       nMacroIter
+                                                                       projected_maximum_energy
+                                                                       (vecLength projected_maximum_grad)
+                                                                       (maximum . BLAS.toList $ projected_maximum_grad)
+                                                                       projected_maximum_lambda
+               
+               -- call function again to iterate over ridge applications
+               ridge_optimization
+                   elements
+                   educt
+                   prod
+                   multiplicity
+                   charge
+                   nSearchImages
+                   maxIterOuter
+                   maxIterInner
+                   outerSideStepSize
+                   outerStepSize
+                   innerTrust
+                   innerConv
+                   innerInitStep
+                   (gradConv_rms, gradConv_max)
+                   (software, inputTemplate)
+                   micromethod
+                   threads
+                   verbosity
+                   --
+                   1
+                   [ridge_zero]
+                   [projected_optimization]
+           else do
+               -- generate necessary informations first
+               let genericXYZ = XYZ.XYZ { XYZ.nAtoms = length elements
+                                        , XYZ.comment = ""
+                                        , XYZ.xyzcontent = zipWith (\e (x, y, z) -> (e, x, y, z)) elements $ replicate (length elements) (0.0, 0.0, 0.0)
+                                        }
+                   programmPath = "/usr/bin/psi4"
+                   pathRidge_QcMol = vecTemplate2Qc ("MacroIter" ++ show nMacroIter ++ "_MaximumPathGRAD") software elements multiplicity charge inputTemplate educt
+               
+               
+               putStrLn                                 $ "MacroIteration : " ++ (show nMacroIter)
+               
+               -- relax x0' and x1' (from previous iteration) to x0'' and x1'' (this iteration)
+               -- get old xs, x0' and x1' from the previous iteration
+               let xs_vec = loc_geom . ridge_xs . head $ ridges
+                   x0'_vec = loc_geom . ridge_x0 . head $ ridges
+                   x1'_vec = loc_geom . ridge_x1 . head $ ridges
+                   x0'_x1'_vec = x1'_vec - x0'_vec
+                   xs_lambda = (vecLength (xs_vec - x0'_vec)) / (vecLength x0'_x1'_vec)
+               
+               if (verbosity == Medium || verbosity == High || verbosity == Debug)
+                  then do
+                      putStrLn                          $ "    lambda(x*) : " ++ show xs_lambda
+                      putStrLn                          $ "                                                                "
+                  else return ()
+               
+               -- if the lambda value of the old ridge is within the simple criteria (0.3 < xs_lambda < 0.7)
+               -- then relax by using the gradient form xs to relax x0' and x1'
+               -- if not, than calculate the gradients at x0' and x1' and relax it by the individual gradients
+               (x0''_vec, x1''_vec) <- if (xs_lambda > 0.3 && xs_lambda < 0.7)
+                                          then do
+                                              let a_mat = BLAS.ident (length . BLAS.toList $ xs_vec)
+                                              let relax_vec = negate $ (BLAS.tr a_mat) BLAS.#> (fromJust . loc_gradient . ridge_xs . head $ ridges) * (BLAS.vector [outerStepSize])
+                                                  x0''_vec = x0'_vec + relax_vec
+                                                  x1''_vec = x1'_vec + relax_vec
+                                              
+                                              -- here should be the step judgement by equation (5)
+                                              
+                                              if (verbosity == Medium || verbosity == High || verbosity == Debug)
+                                                 then do
+                                                     putStrLn $ "    relaxing x0' and x1' based on the gradient at xs (prev. iter)"
+                                                     putStrLn $ "    gradient damping factor is : " ++ (show outerStepSize)
+                                                     putStrLn $ "    and the resulting step length is : " ++ (show $ vecLength relax_vec)
+                                                     putStrLn $ "                                                                "
+                                                 else return ()
+                                              
+                                              -- new neighbouring points
+                                              return (x0''_vec, x1''_vec)
+                                          else do
+                                              let a_x0'_mat = BLAS.ident (length . BLAS.toList $ xs_vec)
+                                                  a_x1'_mat = BLAS.ident (length . BLAS.toList $ xs_vec)
+                                              let x0'_gradient = gradient_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_x0\'Relax") programmPath threads x0'_vec
+                                                  x1'_gradient = gradient_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_x0\'Relax") programmPath threads x1'_vec
+                                                  x0'_relax_vec = negate $ (BLAS.tr a_x0'_mat) BLAS.#> x0'_gradient * (BLAS.vector [outerStepSize])
+                                                  x1'_relax_vec = negate $ (BLAS.tr a_x1'_mat) BLAS.#> x1'_gradient * (BLAS.vector [outerStepSize])
+                                                  x0''_vec = x0'_vec + x0'_relax_vec
+                                                  x1''_vec = x1'_vec + x1'_relax_vec
+                                                  
+                                              -- here should be the step judgement by equation (5)
+                                              
+                                              if (verbosity == Medium || verbosity == High || verbosity == Debug)
+                                                 then do
+                                                     putStrLn $ "    relaxing x0' and x1' based on the gradients at x0' and x1'"
+                                                     putStrLn $ "    gradient damping factor is : " ++ (show outerStepSize)
+                                                     putStrLn $ "    and the resulting x0' step length is : " ++ (show $ vecLength x0'_relax_vec)
+                                                     putStrLn $ "    and the resulting x1' step length is : " ++ (show $ vecLength x1'_relax_vec)
+                                                     putStrLn $ "                                                                "
+                                                 else return ()
+                                              
+                                              -- new neighbouring points
+                                              return (x0''_vec, x1''_vec)
+               
+               -- from x0'' and x1'' search the new x*'
+               if (verbosity == Medium || verbosity == High || verbosity == Debug)
+                  then do
+                      putStrLn                          $ "    x0'' now at                                                 "
+                      XYZ.printXYZ stdout (XYZ.vec2Coord genericXYZ x0''_vec)
+                      putStrLn                          $ "                                                                "
+                      putStrLn                          $ "    x1'' now at                                                 "
+                      XYZ.printXYZ stdout (XYZ.vec2Coord genericXYZ x1''_vec)
+                  else return ()
+               
+               -- new interpolation path between them
+               let x0''_x1''_interpolImages = interpolateGeom (x0''_vec, x1''_vec) nSearchImages
+                   x0''_x1''_imageEnergies = map (energy_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_MaximumPathGRAD") programmPath threads) x0''_x1''_interpolImages
+                   x0''_x1''_vec = x1''_vec - x0''_vec
+               
+               -- print informations about the interpolated images
+               if (verbosity == Debug)
+                  then do
+                      putStrLn                          $ "    interpolated images between x0'' and x1''                 "
+                      let x0''_x1''_interpolImages_xyz = map (XYZ.vec2Coord genericXYZ) x0''_x1''_interpolImages
+                      mapM_ (XYZ.printXYZ stdout) x0''_x1''_interpolImages_xyz
+                      putStrLn                          $ "                                                              "
+                  else return ()
+               if (verbosity == Medium || verbosity == High || verbosity == Debug)
+                  then do
+                      putStrLn                          $ "    energies of the interpolated images                       "
+                      mapM_ (\e -> do
+                          putStr "        "
+                          print e) $ x0''_x1''_imageEnergies
+                      putStrLn                          $ "                                                              "
+                  else return ()
+               
+               -- start searching the maximum on the educt -> product vector
+               -- find the highest energy of the images
+               let x0''_x1''_maxEnergy = maximum x0''_x1''_imageEnergies
+                   x0''_x1''_maxGeom = x0''_x1''_interpolImages !! (fromJust $ findIndex (== x0''_x1''_maxEnergy) x0''_x1''_imageEnergies)
+               if (verbosity == Medium || verbosity == High || verbosity == Debug)
+                  then do
+                      putStr                            $ "    maximal energy of the linear path (x0'' -> x1'') : "
+                      print                             $ x0''_x1''_maxEnergy
+                      if (verbosity == High || verbosity == Debug)
+                         then do
+                             let x0''_x1''_maxGeom_xyz = XYZ.vec2Coord genericXYZ x0''_x1''_maxGeom
+                             XYZ.printXYZ stdout x0''_x1''_maxGeom_xyz
+                         else return ()
+                      putStrLn                          $ "                                                                "
+                  else return ()
+               
+               -- start searching the maximum on the new path
+               putStrLn                                 $ "    start searching for the projected maximum x*                "
+               let projected_optimization = bfgs2 
+                                                innerConv
+                                                maxIterInner
+                                                innerInitStep
+                                                innerTrust
+                                                (negate . energy_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_MaximumPathMicroIter") programmPath threads)
+                                                (negate . (vectorProjection x0''_x1''_vec) . gradient_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_MaximumPathMicroIter") programmPath threads)
+                                                x0''_x1''_maxGeom
+                   projected_maximum_geom = fst projected_optimization
+                   projected_optimization_history = snd projected_optimization
+
+                   -- calculate the gradient at x*
+                   projected_maximum_energy = energy_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_xs") programmPath threads projected_maximum_geom
+                   projected_maximum_grad = gradient_calculator pathRidge_QcMol software ("MacroIter" ++ show nMacroIter ++ "_xs") programmPath threads projected_maximum_geom
+               
+               if (verbosity == Medium || verbosity == High || verbosity == Debug)
+                  then do
+                      if (verbosity == High || verbosity == Debug)
+                         then do
+                             putStrLn                   $ "        micro iteration optimization for the projected maximum  "
+                             solutionMatrixPrint verbosity stdout genericXYZ projected_optimization_history
+                         else return ()
+                      
+                      putStrLn                          $ "                                                                "
+                      putStrLn                          $ "        found projected maximum x* with energy                  "
+                      putStr                            $ "             "
+                      putStrLn                          $ show projected_maximum_energy
+                      putStrLn                          $ "                                                                "
+                      putStrLn                          $ "        at a geometry of                                        "
+                      XYZ.printXYZ stdout (XYZ.vec2Coord genericXYZ projected_maximum_geom)
+                      putStrLn                          $ "                                                                "
+                      putStrLn                          $ "        and gradient at x*                                      "
+                      mapM_ (\(x, y, z) -> do
+                          hPrintf stdout "%+16.8f    " x
+                          hPrintf stdout "%+16.8f    " y
+                          hPrintf stdout "%+16.8f\n"   z) $ list2tuple3 . BLAS.toList $ projected_maximum_grad
+                      putStrLn                          $ "                                                                "
+                  else return ()
+               
+               let ridge_new = Ridge { ridge_xs = makePesPoint projected_maximum_geom (Just projected_maximum_energy) (Just projected_maximum_grad) Nothing
+                                     , ridge_x0 = makePesPoint x0''_vec Nothing Nothing Nothing
+                                     , ridge_x1 = makePesPoint x1''_vec Nothing Nothing Nothing
+                                     }
+                   
+                   xs'_rms_grad = vecLength projected_maximum_grad
+                   xs'_max_grad = maximum . BLAS.toList $ projected_maximum_grad
+                   
+               
+               putStrLn                                 $ "@    iteraration |  energy(x*)  | rms_grad(x*) | max_grad(x*) | lambda(x*) "
+               putStrLn                                 $ "@   -------------|--------------|--------------|--------------|------------"
+               printf "@    %11d | %11.7f | %12.7f | %12.7f | %10.6f \n" 
+                                                                       nMacroIter
+                                                                       projected_maximum_energy
+                                                                       xs'_rms_grad
+                                                                       xs'_max_grad
+                                                                       xs_lambda
+               
+               if (xs'_rms_grad < gradConv_rms && xs'_max_grad < gradConv_max)
+                  then do
+                      putStrLn                          $ "    the final geometry is"
+                      XYZ.printXYZ stdout (XYZ.vec2Coord genericXYZ projected_maximum_geom)
+                      putStrLn                          $ "                                                                "
+                      putStrLn                          $ "       ___________________________________                      "
+                      putStrLn                          $ "      < Määäää! Optimization has converged >                    "
+                      putStrLn                          $ "       -----------------------------------                      "
+                      putStrLn                          $ "       \\                                                       "
+                      putStrLn                          $ "        \\                                                      "
+                      putStrLn                          $ "            __                                                 "
+                      putStrLn                          $ "           UooU\\.'@@@@@@`.                                    "
+                      putStrLn                          $ "           \\__/(@@@@@@@@@@)                                    "
+                      putStrLn                          $ "                 (@@@@@@@@)                                     "
+                      putStrLn                          $ "                 `YY~~~~YY'                                     "
+                      putStrLn                          $ "                  ||    ||                                      "
+                  else do
+                      ridge_optimization
+                          elements
+                          educt
+                          prod
+                          multiplicity
+                          charge
+                          nSearchImages
+                          maxIterOuter
+                          maxIterInner
+                          outerSideStepSize
+                          outerStepSize
+                          innerTrust
+                          innerConv
+                          innerInitStep
+                          (gradConv_rms, gradConv_max)
+                          (software, inputTemplate)
+                          micromethod
+                          threads
+                          verbosity
+                          --
+                          (nMacroIter + 1)
+                          (ridge_new : ridges)
+                          (projected_optimization : micro_info)
+                      

@@ -28,7 +28,8 @@ let product_vec = XYZ.coord2Vec product_xyz
 template_text <- T.readFile "/home/phillip/Template.psi"
 let template = T.unpack template_text
 
-ridge_optimization elements educt_vec product_vec 1 (-1) 21 2 50 0.05 0.05 0.1 1.0e-6 0.02 (1.0e-4, 5.0e-4) (Psi4, template) BFGS2 4 Debug 0 [] []
+--ridge_optimization elements educt_vec product_vec 1 (-1) 5 2 50 0.05 0.05 0.1 1.0e-6 0.02 (1.0e-4, 5.0e-4) (Psi4, template) BFGS2 4 High 0 [] []
+ridge_optimization elements educt_vec product_vec 1 (-1) 5 10 50 0.25 1.0 0.1 1.0e-6 0.02 (1.0e-4, 5.0e-4) (Psi4, template) BFGS2 4 High 0 [] []
 
 
 -- test the matrix printing function
