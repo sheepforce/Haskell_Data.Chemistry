@@ -738,6 +738,9 @@ ridge_optimization
                       putStrLn                          $ "                                                                "
                   else return ()
                
+               -- implement Backstepping here, if the endpoints of the path are higher than any other point
+               -- OR ALTERNATIVELY do it after the projected optimization ran away
+               
                -- start searching the maximum on the new path
                putStrLn                                 $ "    start searching for the projected maximum x*                "
                let projected_optimization = bfgs2 
