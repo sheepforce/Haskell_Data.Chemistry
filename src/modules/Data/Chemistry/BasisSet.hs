@@ -166,6 +166,7 @@ gmsConGaussParser = do
     angMom_raw <- anyChar
     skipSpace
     _ <- (decimal :: Parser Int)
+    _ <- many' (char ' ')
     endOfLine
     expoCoeffs_pairs_raw <- many1 gmsConGaussLineParser
     conGauss_list <- if (angMom_raw /= 'L')
@@ -226,11 +227,11 @@ orb2AngMom orb
     | orb == 's' || orb == 'S' = 0
     | orb == 'p' || orb == 'P' = 1
     | orb == 'd' || orb == 'D' = 2
-    | orb == 'f' || orb == 'f' = 3
-    | orb == 'g' || orb == 'g' = 4
-    | orb == 'h' || orb == 'h' = 5
-    | orb == 'i' || orb == 'i' = 6
-    | orb == 'j' || orb == 'j' = 7
+    | orb == 'f' || orb == 'F' = 3
+    | orb == 'g' || orb == 'G' = 4
+    | orb == 'h' || orb == 'H' = 5
+    | orb == 'i' || orb == 'I' = 6
+    | orb == 'j' || orb == 'J' = 7
     | otherwise = error "not supported angular momentum"
 
 -- angular momentum to orbital
