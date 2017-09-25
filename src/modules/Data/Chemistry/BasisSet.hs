@@ -2,6 +2,7 @@ module Data.Chemistry.BasisSet
 ( Basis(..)
 , ConGauss(..)
 , nwBasisParser
+, gmsBasisParser
 , printBagelBasisList
 ) where
 import qualified Data.Text as T
@@ -139,6 +140,80 @@ nwConGaussLineParser = do
         coeffparser = do
             coeff <- double
             _ <- many' (char ' ') 
+            return $ coeff
+
+-- parse a basis set for GAMESS-US
+gmsBasisParser :: Parser [Basis]
+gmsBasisParser = do
+    _ <- manyTill anyChar (string $ T.pack "$DATA")
+    endOfLine
+    basises <- many1 gmsSingleBasisParser
+    _ <- string $ T.pack "$END"
+    return $ basises
+
+gmsSingleBasisParser :: Parser Basis
+gmsSingleBasisParser = do
+    skipSpace
+    fullElemName <- manyTill anyChar endOfLine
+    parsedGauss <- many1 gmsConGaussParser
+    return $ Basis { element = fullElemName
+                   , basFuns = concat parsedGauss
+                   }
+
+gmsConGaussParser :: Parser [ConGauss]
+gmsConGaussParser = do
+    skipSpace
+    angMom_raw <- anyChar
+    skipSpace
+    _ <- (decimal :: Parser Int)
+    endOfLine
+    expoCoeffs_pairs_raw <- many1 gmsConGaussLineParser
+    conGauss_list <- if (angMom_raw /= 'L')
+                          then do
+                              if ((length . snd $ head expoCoeffs_pairs_raw) == 1)
+                                 then do
+                                     let expoList = map fst expoCoeffs_pairs_raw
+                                         coeffList = concat . (map snd) $ expoCoeffs_pairs_raw
+                                     return $ [ ConGauss { angMom = orb2AngMom angMom_raw
+                                                         , expoCoeff_pairs = zip expoList coeffList
+                                                         }
+                                              ]
+                                 else do
+                                     let expoList = map fst expoCoeffs_pairs_raw
+                                         manyCoeffList = map snd expoCoeffs_pairs_raw
+                                     return $ [ ConGauss { angMom = orb2AngMom angMom_raw
+                                                         , expoCoeff_pairs = zip expoList (map (!! ind) manyCoeffList)
+                                                         }
+                                                | ind <- [0..(length (head manyCoeffList) - 1)]
+                                              ]
+                          else do
+                              let angMoms = [0, 1]
+                                  expoList = map fst expoCoeffs_pairs_raw
+                                  manyCoeffList = map snd expoCoeffs_pairs_raw
+                              return $ [ ConGauss { angMom = angMoms !! ind
+                                                  , expoCoeff_pairs = zip expoList (map (!! ind) manyCoeffList)
+                                                  }
+                                         | ind <- [0, 1]
+                                       ]
+    return conGauss_list
+
+gmsConGaussLineParser :: Parser (Double, [Double])
+gmsConGaussLineParser = do
+    skipSpace
+    _ <- (decimal :: Parser Int)
+    skipSpace
+    expo <- double
+    skipSpace
+    coefflist <- many1 coeffparser
+    _ <- many' (char ' ')
+    endOfLine
+    let pairs = (expo, coefflist)
+    return $ pairs
+    where
+        coeffparser :: Parser Double
+        coeffparser = do
+            coeff <- double
+            _ <- many' (char ' ')
             return $ coeff
 
 
