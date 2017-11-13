@@ -1,5 +1,11 @@
 module Data.Chemistry.Molden
 ( moldenParser
+, n_BF
+, angMom_BF
+, bf2aos_sph
+, basis2AtomicOrbitals
+, moOrderingInAngMom
+, moOrderingInAtoms
 ) where
 import qualified Numeric.LinearAlgebra as BLAS
 import qualified Data.Text as T
@@ -229,3 +235,87 @@ moldenMMOParser = do
             skipSpace
             single_mo_coeff_p <- double
             return single_mo_coeff_p
+
+
+{- ####################################### -}
+{- Functions for working with molden files -}
+{- ####################################### -}
+
+-- get the overall number of basis functions in a molden file
+n_BF :: Molden -> Int
+n_BF molden = length . concat . basfuns$ molden
+
+-- atomwise list of angular momentums for the basis functions
+angMom_BF:: Molden -> [[Int]]
+angMom_BF molden = map (map basfun_angular) $ basfuns molden
+
+-- give in a basis function and you will get atomic orbitals from it in molden ordering
+bf2aos_sph :: BasFun -> [AO]
+bf2aos_sph bf
+    -- this is the molden spherical ordering for s
+    | bf_angmom == 0 = [ AO { ao_n = 0
+                            , ao_l = bf_angmom
+                            , ao_m = i
+                            , ao_r = cgto
+                            } | i <- [0]
+                       ]
+    -- this is the molden spherical ordering for p
+    | bf_angmom == 1 = [ AO { ao_n = 0
+                            , ao_l = bf_angmom
+                            , ao_m = i
+                            , ao_r = cgto
+                            } | i <- [(-1), 0 , 1]
+                       ]
+    -- this is the molden spherical ordering for
+    | bf_angmom == 2 = [ AO { ao_n = 0
+                            , ao_l = bf_angmom
+                            , ao_m = i
+                            , ao_r = cgto
+                            } | i <- [0, 1, (-1), 2, (-2)]
+                       ]
+    -- this is the molden spherical ordering for f
+    | bf_angmom == 3 = [ AO { ao_n = 0
+                            , ao_l = bf_angmom
+                            , ao_m = i
+                            , ao_r = cgto
+                            } | i <- [0, 1, (-1), 2, (-2), 3, (-3)]
+                       ]
+    -- this is the molden spherical ordering for f
+    | bf_angmom == 4 = [ AO { ao_n = 0
+                            , ao_l = bf_angmom
+                            , ao_m = i
+                            , ao_r = cgto
+                            } | i <- [0, 1, (-1), 2, (-2), 3, (-3), 4, (-4)]
+                       ]
+    | otherwise = error "Molden does not support functions higher than g"
+    where bf_angmom = basfun_angular bf
+          cgto = basfun_radial bf
+
+-- from the basis functions expand in the AOs
+-- ordering of the list
+--   atom
+--     Hauptquantenzahl, Nebequantenzahl (e.g. 1s / 2s / 3d / 4f / 5f)
+--       Magnetquantenzahl
+basis2AtomicOrbitals :: Molden -> [[[AO]]]
+basis2AtomicOrbitals molden = mol_ao
+    where
+        -- the basis functions atomwise
+        mol_bf = basfuns molden
+        
+        -- get angular momentums of the basis functions atomwise
+        mol_ao = map (map bf2aos_sph) mol_bf
+
+-- the order of the MOs in the basis of the AOs (giving angular momentum here)
+moOrderingInAngMom :: Molden -> [Int]
+moOrderingInAngMom molden = concat . concat . map (map (map ao_l)) . basis2AtomicOrbitals $ molden
+
+-- the order of the MOs in the basis of the AOs (giving in corresponding atom)
+moOrderingInAtoms :: Molden -> [Int]
+moOrderingInAtoms molden =  fillLLwithPos . map concat $ mol_ao
+    where
+        mol_ao = basis2AtomicOrbitals molden
+
+-- take a nested list and fills the inner entries with its position in the outer index, than flatten
+-- [[1,2,3,4], [5,6,7]] -> [0,0,0,0,1,1,1]
+fillLLwithPos :: [[a]] -> [Int]
+fillLLwithPos a = concat [Prelude.take (length $ a !! i) $ repeat i | i <- [0 .. ((length a) - 1)]]

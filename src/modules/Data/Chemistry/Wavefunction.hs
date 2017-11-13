@@ -41,7 +41,6 @@ data BasFun = BasFun { basfun_angular :: Int
 data AO = AO { ao_n :: Int
              , ao_l :: Int
              , ao_m :: Int
-             , ao_ms :: Int
              , ao_r :: CGTO
              } deriving Show
 
