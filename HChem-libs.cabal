@@ -18,6 +18,8 @@ Library
   Exposed-modules:
     Data.Chemistry.XYZ,
     Data.Chemistry.BasisSet
+    Data.Chemistry.Wavefunction
+    Data.Chemistry.Molden
   hs-source-dirs:
     src/modules
   ghc-options:

@@ -32,9 +32,9 @@ data XYZ = XYZ { nAtoms :: Int
 
 xyzParser :: Parser XYZ
 xyzParser = do
-  _ <- many' $ char ' '
+  skipSpace
   nAtoms_parse <- decimal
-  _ <- many' $ char ' '
+  skipSpace
   _ <- endOfLine
   comment_parse <- manyTill anyChar endOfLine
   --coordinates <- many' xyzCoordLineParser
@@ -47,15 +47,15 @@ xyzParser = do
     where
       xyzCoordLineParser :: Parser (String,Double,Double,Double)
       xyzCoordLineParser = do
-        _ <- many' $ char ' '        
+        skipSpace        
         element <- manyTill anyChar (char ' ')
-        _ <- many' $ char ' '
+        skipSpace
         x <- double
-        _ <- many' $ char ' '
+        skipSpace
         y <- double
-        _ <- many' $ char ' '
+        skipSpace
         z <- double
-        _ <- many' $ char ' '
+        skipSpace
         _ <- many' endOfLine
         return $ (element,x,y,z)
 
@@ -63,6 +63,7 @@ xyzTrajParser :: Parser [XYZ]
 xyzTrajParser = do
     trajectory <- many' xyzParser
     return $ trajectory
+
 
 {- ################################ -}
 {- Functions to work with XYZ files -}
