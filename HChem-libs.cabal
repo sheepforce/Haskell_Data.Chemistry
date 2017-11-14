@@ -20,6 +20,7 @@ Library
     Data.Chemistry.BasisSet
     Data.Chemistry.Wavefunction
     Data.Chemistry.Molden
+    Data.Chemistry.BasisOptimisation
   hs-source-dirs:
     src/modules
   ghc-options:

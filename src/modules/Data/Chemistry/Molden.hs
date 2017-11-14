@@ -1,5 +1,9 @@
 module Data.Chemistry.Molden
-( moldenParser
+( MoldenCoord(..)
+, MMO(..)
+, Molden(..)
+, moldenParser
+, n_e
 , n_BF
 , angMom_BF
 , bf2aos_sph
@@ -17,6 +21,7 @@ import Data.Attoparsec.Text.Lazy
 import Data.Chemistry.Wavefunction
 import Data.Chemistry.BasisSet
 import Data.List
+
 
 {- ############################ -}
 {- define data types for Molden -}
@@ -244,6 +249,11 @@ moldenMMOParser = do
 {- ####################################### -}
 {- Functions for working with molden files -}
 {- ####################################### -}
+
+
+-- get the overall number of electrons in the molecule
+n_e :: Molden -> Double
+n_e molden = sum . map occup . mos $ molden
 
 -- get the overall number of basis functions in a molden file
 n_BF :: Molden -> Int

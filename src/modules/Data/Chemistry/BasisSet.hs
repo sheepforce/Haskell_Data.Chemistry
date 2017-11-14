@@ -5,6 +5,7 @@ module Data.Chemistry.BasisSet
 , gmsBasisParser
 , printBagelBasisList
 , orb2AngMom
+, angMom2Orb
 ) where
 import qualified Data.Text as T
 import Data.Attoparsec.Text.Lazy
