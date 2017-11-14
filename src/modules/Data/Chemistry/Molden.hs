@@ -6,6 +6,8 @@ module Data.Chemistry.Molden
 , basis2AtomicOrbitals
 , moOrderingInAngMom
 , moOrderingInAtoms
+, moOrderingInBF
+, getMOcoeffsForBFinOrb
 ) where
 import qualified Numeric.LinearAlgebra as BLAS
 import qualified Data.Text as T
@@ -14,6 +16,7 @@ import Data.Attoparsec.Text.Lazy
 --import Data.Chemistry.XYZ
 import Data.Chemistry.Wavefunction
 import Data.Chemistry.BasisSet
+import Data.List
 
 {- ############################ -}
 {- define data types for Molden -}
@@ -78,9 +81,10 @@ moldenParser = do
     -- parse (number of atoms) basises
     basfuns_p <- count (length . snd $ atoms_p) moldenGTOAtomParser
     skipSpace
+    -- catch possible spherical definitions
+    _ <- manyTill anyChar (string $ T.pack "[MO]")
     
     -- parse the "[MO]" block
-    _ <- string $ T.pack "[MO]"
     skipSpace
     mmos_p <- many1 moldenMMOParser 
     
@@ -311,9 +315,25 @@ moOrderingInAngMom molden = concat . concat . map (map (map ao_l)) . basis2Atomi
 
 -- the order of the MOs in the basis of the AOs (giving in corresponding atom)
 moOrderingInAtoms :: Molden -> [Int]
-moOrderingInAtoms molden =  fillLLwithPos . map concat $ mol_ao
+moOrderingInAtoms molden =  fillLLwithPos . map concat . basis2AtomicOrbitals $ molden
+
+-- the order of the MOs in the basis of the AOs (given in corresponding basis functions)
+moOrderingInBF :: Molden -> [Int]
+moOrderingInBF molden = fillLLwithPos . concat . map (map (map ao_l)) . basis2AtomicOrbitals $ molden
+
+-- get MO coefficients (sum over AOs with same n and l but different m)
+-- for a specific basis function in a molecular orbital
+getMOcoeffsForBFinOrb :: Int -> Int -> Int -> Molden -> Double
+getMOcoeffsForBFinOrb mo_number bf_number angMomOfBF molden
+    | isInfixOf listIndexForBF listIndexForAngMom == True = sum coeffs_for_BF
+    | otherwise = error "the desired angular momentum does not belong to the specified basis function"
     where
-        mol_ao = basis2AtomicOrbitals molden
+        mocoeffs = coeffs $ (mos molden) !! mo_number
+        bfIndexList = moOrderingInBF molden
+        angMomIndexList = moOrderingInAngMom molden
+        listIndexForBF = findIndices (== bf_number) bfIndexList
+        listIndexForAngMom = findIndices (== angMomOfBF) angMomIndexList
+        coeffs_for_BF = [mocoeffs BLAS.! i | i <- listIndexForBF]
 
 -- take a nested list and fills the inner entries with its position in the outer index, than flatten
 -- [[1,2,3,4], [5,6,7]] -> [0,0,0,0,1,1,1]
