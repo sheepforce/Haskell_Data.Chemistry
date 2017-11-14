@@ -71,8 +71,8 @@ moldenParser = do
         skipSpace
         -- the units used
         units_p <- do
-            units_raw <- (string $ T.pack "AU") <|> (string $ T.pack "Angs")
-            if (units_raw == T.pack "AU")
+            units_raw <- ((string $ T.pack "AU") <|> (string $ T.pack "(AU)")) <|> ((string $ T.pack "Angs") <|> (string $ T.pack "(Angs)"))
+            if (units_raw == T.pack "AU" || units_raw == T.pack "(AU)")
                then return Bohr
                else return Angstrom
         -- the geometry line by line
@@ -168,10 +168,9 @@ moldenGTOAtomBFParser = do
     skipSpace
     npgto_p <- decimal
     
-    -- parse the zero
+    -- parse the zero or other number till the endOfLine
     skipSpace
-    _ <- char '0'
-    endOfLine
+    _ <- manyTill anyChar endOfLine
     
     -- parse the PGTOs line by line and make a CGTO of them
     cgto_p <- count npgto_p pgto_and_ContrCoeff
