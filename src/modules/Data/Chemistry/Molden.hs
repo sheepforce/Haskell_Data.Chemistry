@@ -21,7 +21,7 @@ import Data.Attoparsec.Text.Lazy
 import Data.Chemistry.Wavefunction
 import Data.Chemistry.BasisSet
 import Data.List
-import Data.Maybe()
+import Data.Maybe
 
 
 {- ############################ -}
@@ -251,9 +251,11 @@ moldenMO = do
         singleMMOParser = do
             -- parse the "Sym" statement
             skipSpace
-            _ <- string $ T.pack "Sym="
-            skipSpace
-            sym_p <- manyTill anyChar $ char ' '
+            sym_p <- do
+                sym_temp <- maybeOption symParse
+                if (isNothing sym_temp == True)
+                   then return "e"
+                   else return $ fromJust sym_temp
             
             -- parse the "Ene" statement
             skipSpace
@@ -290,6 +292,15 @@ moldenMO = do
                        , occup = occup_p
                        , coeffs = coeffs_p 
                        }
+        
+        -- wrap the symmetry parser in an optional statement, so it can be optional
+        symParse :: Parser String
+        symParse = do
+            _ <- string $ T.pack "Sym="
+            skipSpace
+            sym_p <- manyTill anyChar $ char ' ' <|> char '\n'
+            
+            return $ sym_p
 
 
         -- parse a single line of the coefficients in the [MO] block for a single MO
