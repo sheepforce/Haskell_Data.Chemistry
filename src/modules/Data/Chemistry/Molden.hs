@@ -64,6 +64,10 @@ moldenParser = do
     -- it all began with "[Molden Format]" ...
     _ <- string $ T.pack "[Molden Format]"    
     
+    -- possibly there is a "[Title]" block (ORCA, Janpa)
+    skipSpace
+    _ <- maybeOption moldenTITLE
+    
     -- parse the "[Atoms]" block, containing the geometry informations
     skipSpace
     atoms_p <- moldenATOMS
@@ -81,6 +85,16 @@ moldenParser = do
                   , basfuns = basfuns_p
                   , mos = mmos_p
                   }
+
+moldenTITLE :: Parser String
+moldenTITLE = do
+    -- it starts with the "[Title]"
+    _ <- string $ T.pack "[Title]"
+    skipSpace
+    title_p <- manyTill anyChar endOfLine
+    
+    return title_p
+    
     
 moldenATOMS :: Parser (Units, [MoldenCoord])
 moldenATOMS = do
@@ -180,7 +194,7 @@ moldenGTO = do
             -- the zero at the end
             skipSpace
             _ <- char '0'
-            endOfLine
+            skipSpace
             
             -- parse the basis functions of the given atom
             basfunsAtom_p <- many1 moldenGTOAtomBFParser    
@@ -209,9 +223,10 @@ moldenGTO = do
             
             -- parse the zero or other number till the endOfLine
             skipSpace
-            _ <- manyTill anyChar endOfLine
+            _ <- manyTill anyChar $ char ' ' <|> char '\n'
             
             -- parse the PGTOs line by line and make a CGTO of them
+            skipSpace
             cgto_p <- count npgto_p pgto_and_ContrCoeff
             
             return $ BasFun { basfun_angular = angular_p
@@ -228,7 +243,6 @@ moldenGTO = do
             -- parse the contraction coefficient
             skipSpace
             contrcoeff_p <- double
-            endOfLine
             
             -- return the result
             return $ (pgto_p, contrcoeff_p)
