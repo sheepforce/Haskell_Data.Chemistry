@@ -34,20 +34,19 @@ xyzParser :: Parser XYZ
 xyzParser = do
   skipSpace
   nAtoms_parse <- decimal
-  skipSpace
-  _ <- endOfLine
+  _ <- manyTill anyChar endOfLine
   comment_parse <- manyTill anyChar endOfLine
   --coordinates <- many' xyzCoordLineParser
   coordinates <- count nAtoms_parse xyzCoordLineParser
   -- _ <- endOfLine <|> endOfInput
-  return $ XYZ { nAtoms = nAtoms_parse
-               , comment = comment_parse
-               , xyzcontent = coordinates
-               }
+  return XYZ { nAtoms = nAtoms_parse
+             , comment = comment_parse
+             , xyzcontent = coordinates
+             }
     where
       xyzCoordLineParser :: Parser (String,Double,Double,Double)
       xyzCoordLineParser = do
-        skipSpace        
+        skipSpace
         element <- manyTill anyChar (char ' ')
         skipSpace
         x <- double
@@ -57,12 +56,12 @@ xyzParser = do
         z <- double
         skipSpace
         _ <- many' endOfLine
-        return $ (element,x,y,z)
+        return (element,x,y,z)
 
 xyzTrajParser :: Parser [XYZ]
 xyzTrajParser = do
     trajectory <- many' xyzParser
-    return $ trajectory
+    return trajectory
 
 
 {- ################################ -}
@@ -109,7 +108,7 @@ mat2Coord a mat = XYZ { nAtoms = (nAtoms a)
     where
         content = zipWith (\e (x, y, z) -> (e, x, y, z)) (getElements a) coords
         coords = (listList2TupleList . BLAS.toLists) mat
-                
+
         listList2TupleList :: [[Double]] -> [(Double, Double, Double)]
         listList2TupleList listlist = map (\[x,y,z] -> (x,y,z)) listlist
 
@@ -130,11 +129,11 @@ align (atom1, atom2, atom3) mol = mat2Coord mol mol_aligned
     where
         -- transform to matrix for easy algebra
         mol_mat = coord2Mat mol
-        
+
         -- translate so that atom 1 is in the origin
         atom1_coords = mol_mat BLAS.! atom1
         mol_1toOrigin = BLAS.fromRows $ [mol_mat BLAS.! ind - atom1_coords | ind <- [0 .. (BLAS.rows mol_mat - 1)]]
-        
+
         -- rotate that atom 2 on Z-axis
         -- first bring atom 2 to x = 0 by rotation around z
         -- get coordinates from atom 2 and then the necessary angle for this rotation
@@ -147,7 +146,7 @@ align (atom1, atom2, atom3) mol = mat2Coord mol mol_aligned
                                        , 0                  , 0                         , 1]
         mol_2toX0_vecs = map (mat_rotZ_2toX0 BLAS.#>) $ BLAS.toRows mol_1toOrigin
         mol_2toX0 = BLAS.fromRows mol_2toX0_vecs
-        
+
         -- second bring atom 2 to y = 0 by rotation around x
         atom2_coords_s = mol_2toX0 BLAS.! atom2
         y2_s = atom2_coords_s BLAS.! 1
@@ -158,7 +157,7 @@ align (atom1, atom2, atom3) mol = mat2Coord mol mol_aligned
                                        , 0, sin rotAngleX_2toY0, cos rotAngleX_2toY0]
         mol_2toY0_vecs = map (mat_rotX_2toY0 BLAS.#>) $ BLAS.toRows mol_2toX0
         mol_2toY0 = BLAS.fromRows mol_2toY0_vecs
-        
+
         -- now that atom 2 is on the z axis, bring atom3 to XZ plane by rotation around z
         atom3_coords = mol_2toY0 BLAS.! atom3
         x3 = atom3_coords BLAS.! 0
@@ -169,6 +168,6 @@ align (atom1, atom2, atom3) mol = mat2Coord mol mol_aligned
                                        , 0                   , 0                          , 1]
         mol_3toY0_vecs = map (mat_rotZ_3toY0 BLAS.#>) $ BLAS.toRows mol_2toY0
         mol_3toY0 = BLAS.fromRows mol_3toY0_vecs
-        
+
         -- give the final rotated structure
         mol_aligned = mol_3toY0
