@@ -1,27 +1,25 @@
-Name:		HChem-libs
-Version:	0.2
-Cabal-Version:  >= 1.2
-License:	GPL-3
-License-File:	LICENSE
-Author:		Phillip Seeber
-Homepage:	https://github.com/sheepforce/Haskell_Data.Chemistry
-Category:	Chemistry
-Synopsis:	Handling chemical data formats
-Build-Type:     Simple
+name: HChem-libs
+version: 0.2
+cabal-version: >=1.2
+build-type: Simple
+license: GPL-3
+license-file: LICENSE
+homepage: https://github.com/sheepforce/Haskell_Data.Chemistry
+synopsis: Handling chemical data formats
+category: Chemistry
+author: Phillip Seeber
 
-Library
-  Build-Depends:
-    base,
-    attoparsec,
-    text,
-    hmatrix>=0.18
-  Exposed-modules:
-    Data.Chemistry.XYZ,
-    Data.Chemistry.BasisSet
-    Data.Chemistry.Wavefunction
-    Data.Chemistry.Molden
-    Data.Chemistry.BasisOptimisation
-  hs-source-dirs:
-    src/modules
-  ghc-options:
-    -Wall -O2
+library
+    exposed-modules:
+        Data.Chemistry.XYZ
+        Data.Chemistry.BasisSet
+        Data.Chemistry.Wavefunction
+        Data.Chemistry.Molden
+        Data.Chemistry.BasisOptimisation
+    build-depends:
+        base -any,
+        attoparsec -any,
+        text -any,
+        hmatrix >=0.18
+    hs-source-dirs: src/modules
+    ghc-options: -Wall -O2

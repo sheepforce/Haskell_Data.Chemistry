@@ -13,15 +13,14 @@ module Data.Chemistry.Molden
 , moOrderingInBF
 , getMOcoeffsForBFinOrb
 ) where
-import qualified Numeric.LinearAlgebra as BLAS
-import qualified Data.Text as T
-import Control.Applicative
-import Data.Attoparsec.Text.Lazy
---import Data.Chemistry.XYZ
-import Data.Chemistry.Wavefunction
-import Data.Chemistry.BasisSet
-import Data.List
-import Data.Maybe
+import           Control.Applicative
+import           Data.Attoparsec.Text.Lazy
+import qualified Data.Text                   as T
+import qualified Numeric.LinearAlgebra       as BLAS
+import           Data.Chemistry.BasisSet
+import           Data.Chemistry.Wavefunction
+import           Data.List
+import           Data.Maybe
 
 
 {- ############################ -}
@@ -33,25 +32,25 @@ data Units  = Angstrom | Bohr deriving Show
 
 -- a data type for the geometry informations in a molden [Atoms] block
 data MoldenCoord = MoldenCoord { moco_element :: String
-                               , moco_natom :: Int
+                               , moco_natom   :: Int
                                , moco_nproton :: Int
-                               , moco_coord :: (Double, Double, Double)
+                               , moco_coord   :: (Double, Double, Double)
                                } deriving Show
 
 -- extended data type for MOs in a Molden-File
-data MMO = MMO { sym :: String
+data MMO = MMO { sym    :: String
                , energy :: Double
-               , spin :: Spin
-               , occup :: Double
+               , spin   :: Spin
+               , occup  :: Double
                , coeffs :: MO
                } deriving Show
 
 -- contents of a Molden file
 data Molden = Molden { -- atoms contains the geometry
-                       atoms :: (Units, [MoldenCoord])
+                       atoms   :: (Units, [MoldenCoord])
                        -- the basis functions, outer for the atom, inner for gto
                      , basfuns :: [[BasFun]]
-                     , mos :: [MMO]
+                     , mos     :: [MMO]
                      } deriving Show
 
 
@@ -62,24 +61,24 @@ data Molden = Molden { -- atoms contains the geometry
 moldenParser :: Parser Molden
 moldenParser = do
     -- it all began with "[Molden Format]" ...
-    _ <- string $ T.pack "[Molden Format]"    
-    
+    _ <- string $ T.pack "[Molden Format]"
+
     -- possibly there is a "[Title]" block (ORCA, Janpa)
     skipSpace
     _ <- maybeOption moldenTITLE
-    
+
     -- parse the "[Atoms]" block, containing the geometry informations
     skipSpace
     atoms_p <- moldenATOMS
-    
+
     -- parse the "[GTO]" block
     skipSpace
     basfuns_p <- moldenGTO
-    
+
     -- parse the "[MO]" block
     skipSpace
     mmos_p <- moldenMO
-    
+
     -- return the results
     return Molden { atoms = atoms_p
                   , basfuns = basfuns_p
@@ -92,15 +91,15 @@ moldenTITLE = do
     _ <- string $ T.pack "[Title]"
     skipSpace
     title_p <- manyTill anyChar endOfLine
-    
+
     return title_p
-    
-    
+
+
 moldenATOMS :: Parser (Units, [MoldenCoord])
 moldenATOMS = do
     -- it starts with the "[Atoms]" block
     _ <- string $ T.pack "[Atoms]"
-    
+
     -- parse the units. Maybe AU/(AU) or Angs/(Angs)
     skipSpace
     units_p <- do
@@ -108,14 +107,14 @@ moldenATOMS = do
         if (T.isInfixOf (T.toLower . T.pack $ units_raw) (T.pack "(au)") == True)
            then return Bohr
            else return Angstrom
-    
+
     -- the geometry line by line
     skipSpace
     geom <- many1 moldenCoordLineParser
-    
+
     -- return the results
     return (units_p, geom)
-    
+
     where
         -- parse a coordinate line in a [Atoms] block
         moldenCoordLineParser :: Parser MoldenCoord
@@ -123,27 +122,27 @@ moldenATOMS = do
             -- parse the atomic symbol
             skipSpace
             element_p <- manyTill anyChar (char ' ')
-            
+
             -- parse the number of the atom in the molecule
             skipSpace
             natom_p <- decimal
-            
+
             -- parse the atomic number (aka number of protons)
             skipSpace
             nproton_p <- decimal
-            
+
             -- the x coordinate
             skipSpace
             x_p <- double
-            
+
             -- the y coordinate
             skipSpace
             y_p <- double
-            
+
             -- the z coordinate
             skipSpace
             z_p <- double
-            
+
             --skipSpace
             -- return the results
             return MoldenCoord { moco_element = element_p
@@ -156,11 +155,11 @@ moldenGTO :: Parser [[BasFun]]
 moldenGTO = do
     -- it starts with the "[GTO]" block
     _ <- string $ T.pack "[GTO]"
-    
+
     -- parse the basis functions of an atom
     skipSpace
     basfuns_p <- many1 moldenGTOAtomParser
-    
+
     -- parse the informations about coordinate system
     skipSpace
     _ <- maybeOption (string $ T.pack "[5D]")
@@ -169,10 +168,10 @@ moldenGTO = do
     skipSpace
     _ <- maybeOption (string $ T.pack "[9G]")
     skipSpace
-    
+
     -- return the results (basis functions atomwise)
     return basfuns_p
-    
+
     where
         {- parse the basis functions for a complete atom, for example
             2  0
@@ -190,20 +189,20 @@ moldenGTO = do
             -- parse the atom number, on which the basis functions are centred
             skipSpace
             _ <- (decimal :: Parser Int)
-            
+
             -- the zero at the end
             skipSpace
             _ <- char '0'
             skipSpace
-            
+
             -- parse the basis functions of the given atom
-            basfunsAtom_p <- many1 moldenGTOAtomBFParser    
-            
+            basfunsAtom_p <- many1 moldenGTOAtomBFParser
+
             --return the result
             return basfunsAtom_p
-        
-        
-        {- parse a single basis function for a given atom 
+
+
+        {- parse a single basis function for a given atom
           s      3  0
                 13.0100000000         0.0334987264
                  1.9620000000         0.2348008012
@@ -216,34 +215,34 @@ moldenGTO = do
             angular_p <- do
                 angular_char <- anyChar
                 return $ orb2AngMom angular_char
-            
+
             -- number of PGTOs to experct
             skipSpace
             npgto_p <- decimal
-            
+
             -- parse the zero or other number till the endOfLine
             skipSpace
             _ <- manyTill anyChar $ char ' ' <|> char '\n'
-            
+
             -- parse the PGTOs line by line and make a CGTO of them
             skipSpace
             cgto_p <- count npgto_p pgto_and_ContrCoeff
-            
+
             return $ BasFun { basfun_angular = angular_p
                             , basfun_radial = cgto_p
                             }
-        
+
         -- parse a single pgto and its contraction coefficient
         pgto_and_ContrCoeff :: Parser (PGTO, ContrCoeff)
         pgto_and_ContrCoeff = do
             -- parse the exponent
             skipSpace
             pgto_p <- double
-            
+
             -- parse the contraction coefficient
             skipSpace
             contrcoeff_p <- double
-            
+
             -- return the result
             return $ (pgto_p, contrcoeff_p)
 
@@ -252,14 +251,14 @@ moldenMO = do
     -- it starts with the "[Atoms]" block
     skipSpace
     _ <- string $ T.pack "[MO]"
-    
+
     -- parse the MOs
     skipSpace
     mmos <- many1 singleMMOParser
-    
+
     -- return the results
     return mmos
-    
+
     where
         singleMMOParser :: Parser MMO
         singleMMOParser = do
@@ -270,13 +269,13 @@ moldenMO = do
                 if (isNothing sym_temp == True)
                    then return "e"
                    else return $ fromJust sym_temp
-            
+
             -- parse the "Ene" statement
             skipSpace
             _ <- string $ T.pack "Ene="
             skipSpace
             ene_p <- double
-            
+
             -- parse the "Spin" statement
             skipSpace
             _ <- string $ T.pack "Spin="
@@ -286,34 +285,34 @@ moldenMO = do
                 if (spin_raw == "Alpha")
                    then return Alpha
                    else return Beta
-            
+
             -- parse the "Occup" statement
             skipSpace
             _ <- string $ T.pack "Occup="
             skipSpace
             occup_p <- double
-            
+
             -- parse the MO coefficients in the AO expansion
             skipSpace
             coeffs_p <- do
                 coeffs_raw <- many1 coeff_lineParser
                 return $ BLAS.fromList coeffs_raw
-            
+
             -- return the results
             return MMO { sym = sym_p
                        , energy = ene_p
                        , spin = spin_p
                        , occup = occup_p
-                       , coeffs = coeffs_p 
+                       , coeffs = coeffs_p
                        }
-        
+
         -- wrap the symmetry parser in an optional statement, so it can be optional
         symParse :: Parser String
         symParse = do
             _ <- string $ T.pack "Sym="
             skipSpace
             sym_p <- manyTill anyChar $ char ' ' <|> char '\n'
-            
+
             return $ sym_p
 
 
@@ -321,13 +320,13 @@ moldenMO = do
         coeff_lineParser :: Parser Double
         coeff_lineParser = do
             -- not interested in the first number (label of basis function)
-            skipSpace            
+            skipSpace
             _ <- (decimal :: Parser Int)
-            
+
             -- but parse the mo coefficient
             skipSpace
             single_mo_coeff_p <- double
-            
+
             -- return the result
             return single_mo_coeff_p
 
@@ -400,7 +399,7 @@ basis2AtomicOrbitals molden = mol_ao
     where
         -- the basis functions atomwise
         mol_bf = basfuns molden
-        
+
         -- get angular momentums of the basis functions atomwise
         mol_ao = map (map bf2aos_sph) mol_bf
 

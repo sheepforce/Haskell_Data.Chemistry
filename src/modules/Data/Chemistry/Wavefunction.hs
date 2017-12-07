@@ -29,7 +29,7 @@ type CGTO = [(PGTO,  ContrCoeff)]
 -- a basis function is described by the nebenquantenzahl l (angular momentum)
 -- and a radial function (CGTO)
 data BasFun = BasFun { basfun_angular :: Int
-                     , basfun_radial :: CGTO
+                     , basfun_radial  :: CGTO
                      } deriving Show
 
 -- an atomic orbital is characterized by

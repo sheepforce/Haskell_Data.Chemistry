@@ -4,11 +4,11 @@ module Data.Chemistry.BasisOptimisation
 ) where
 --import qualified Numeric.LinearAlgebra as BLAS
 --import qualified Data.Text as T
-import Text.Printf
-import Data.Chemistry.Molden
-import Data.Chemistry.Wavefunction
-import Data.Chemistry.BasisSet
-import System.IO
+import           Data.Chemistry.BasisSet
+import           Data.Chemistry.Molden
+import           Data.Chemistry.Wavefunction
+import           System.IO
+import           Text.Printf
 --import Data.List
 
 
@@ -28,14 +28,14 @@ getContrCoeff setOfBFs setOfMOs renorm molden
         -- for making sure no nonsensical combinations of basis functions were selected
         angMomOfAllBFs = concat . map (map basfun_angular) . basfuns $ molden
         angMomOfSelBFs = [angMomOfAllBFs !! i | i <- setOfBFs]
-        
+
         -- gives [[Double]], where outer layer is the MO, from which coefficients were determined
         -- and inner layer is the basis function
         moCoeffsByMOandBF = [[getMOcoeffsForBFinOrb j i (head angMomOfSelBFs) molden | i <- setOfBFs] | j <- setOfMOs]
-        
+
         -- now properly average them together (over the MOs)
         contrCoeff = [(sum $ map (!! i) moCoeffsByMOandBF) / (fromIntegral $ length moCoeffsByMOandBF) | i <- [0 .. ((length $ head moCoeffsByMOandBF) - 1)]]
-        
+
         -- renormalize contraction coefficient
         renormN = 1.0 / (sum contrCoeff)
         contrCoeff_renorm = map (* renormN) contrCoeff
@@ -47,13 +47,13 @@ getContrCoeff_print handle setOfBFs setOfMOs renorm molden = do
         angMomOfAllBFs = concat . map (map basfun_angular) . basfuns $ molden
         angMomOfSelBFs = [angMomOfAllBFs !! i | i <- setOfBFs]
         angMomOfSelBF = head angMomOfSelBFs
-    
-    
+
+
     -- print them
     putStrLn $ "contraction coefficients for"
-    putStrLn $ "  angular momentum : " ++ (show $ angMom2Orb angMomOfSelBF)
-    putStrLn $ "  basis functions  : " ++ (show setOfBFs)
-    putStrLn $ "  from the MOs     : " ++ (show setOfMOs)
-    putStrLn $ "  renormalized     : " ++ (show renorm)
+    putStrLn $ "  angular momentum : " ++ show (angMom2Orb angMomOfSelBF)
+    putStrLn $ "  basis functions  : " ++ show setOfBFs
+    putStrLn $ "  from the MOs     : " ++ show setOfMOs
+    putStrLn $ "  renormalized     : " ++ show renorm
     putStrLn $ ""
     mapM_ (hPrintf handle "%9.7f\n") contrCoeff

@@ -11,18 +11,18 @@ module Data.Chemistry.XYZ
 , interpolate
 , align
 ) where
-import System.IO
-import Data.Attoparsec.Text.Lazy
-import Text.Printf
-import qualified Numeric.LinearAlgebra as BLAS
+import           Data.Attoparsec.Text.Lazy
+import qualified Numeric.LinearAlgebra     as BLAS
+import           System.IO
+import           Text.Printf
 
 
 {- ################# -}
 {- define Data Types -}
 {- ################# -}
 
-data XYZ = XYZ { nAtoms :: Int
-               , comment :: String
+data XYZ = XYZ { nAtoms     :: Int
+               , comment    :: String
                , xyzcontent :: [(String,Double,Double,Double)]
                } deriving Show
 

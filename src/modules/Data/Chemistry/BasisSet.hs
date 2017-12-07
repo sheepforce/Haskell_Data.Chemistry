@@ -7,11 +7,11 @@ module Data.Chemistry.BasisSet
 , orb2AngMom
 , angMom2Orb
 ) where
-import qualified Data.Text as T
-import Data.Attoparsec.Text.Lazy
-import System.IO
-import Control.Applicative
-import Text.Printf
+import           Control.Applicative
+import           Data.Attoparsec.Text.Lazy
+import qualified Data.Text                 as T
+import           System.IO
+import           Text.Printf
 
 
 {- ################# -}
@@ -19,7 +19,7 @@ import Text.Printf
 {- ################# -}
 
 -- Define data representing a finite gaussian basis
-data Basis = Basis { element  :: String
+data Basis = Basis { element :: String
                    , basFuns :: [ConGauss]
                    } deriving Show
 
@@ -43,7 +43,7 @@ nwBasisParser = do
     endOfLine
     basises <- many1 nwSingleBasisParser
     _ <- string $ T.pack "END"
-    return $ basises
+    return basises
 
 -- parse basis for a single element
 nwSingleBasisParser :: Parser Basis
@@ -69,20 +69,20 @@ SP and other contractions as in the pople basis sets are recognized and flattene
 general contractions are also recognized and flattened
 example:
 C    S
-   3047.5249000              0.0018347 
+   3047.5249000              0.0018347
     457.3695100              0.0140373
 
 would give ("C", [ConGauss {angMom = 0, expoCoeff_pairs = [(3047.5249000, 0.0018347), (457.3695100, 0.0140373)]}])
 
 example:
 C    SP
-      7.8682724             -0.1193324              0.0689991        
+      7.8682724             -0.1193324              0.0689991
 
 would give ("C", [ConGauss {angMom = 0, expoCoeff_pairs = [(7.8682724, -0.1193324)]}, ConGauss {angMom = 1, expoCoeff_pairs = [(7.8682724, 0.0689991)]}])
 
 example:
 C    S
-      0.1687144              1.0000000              2.0000000  
+      0.1687144              1.0000000              2.0000000
 
 would give ("C", [ConGauss {angMom = 1, expoCoeff_pairs = [(0.1687144, 1.0)], ConGauss {angMom = 0, expoCoeff_pairs = [(0.1687144,1.0)]}])
 -}
@@ -141,7 +141,7 @@ nwConGaussLineParser = do
         coeffparser :: Parser Double
         coeffparser = do
             coeff <- double
-            _ <- many' (char ' ') 
+            _ <- many' (char ' ')
             return $ coeff
 
 -- parse a basis set for GAMESS-US
@@ -249,7 +249,7 @@ angMom2Orb angmom
     | angmom == 7 = 'j'
     | otherwise = error "not supported angular momentum"
 
--- give a element and a list. Checks if every element in this list ist the given element    
+-- give a element and a list. Checks if every element in this list ist the given element
 allequal :: (Eq a) => a -> [a] -> Bool
 allequal e elist = foldl (\acc x -> if x /= e then False else acc) True elist
 
@@ -272,14 +272,14 @@ printBagelBasisList handle basises = do
             printBasis {-handle-} a
             hPrintf handle "%s\n" $ ","
             printBasisList {-handle-} b
-        
+
         -- print the basis of a single element but avoid braces of higher levels
         printBasis :: {-Handle ->-} Basis -> IO ()
         printBasis {-handle-} basis = do
             hPrintf handle "  %s\n"  $ "\"" ++ element basis ++ "\" : ["
             printConGaussList {-handle-} $ basFuns basis
             hPrintf handle "\n  %s"    $ "]"
-        
+
         -- print the contracted gaussians but not the element or braces of higher levels
         printConGaussList :: {-Handle ->-} [ConGauss] -> IO ()
         printConGaussList {-handle-} []    = return ()
@@ -288,7 +288,7 @@ printBagelBasisList handle basises = do
             printConGauss {-handle-} a
             hPrintf handle "%s\n" $ ","
             printConGaussList {-handle-} b
-        
+
         -- print a single contracted gaussian in json/Bagel format but not braces of higher levels
         printConGauss :: {-Handle ->-} ConGauss -> IO ()
         printConGauss {-handle-} congauss  = do
@@ -306,7 +306,7 @@ printBagelBasisList handle basises = do
             hPrintf handle "%s\n"         $ "]]"
             -- print closing brace
             hPrintf handle "    %s"       $ "}"
-        
+
         -- print a list of doubles with 7 decimals precision as it would look in haskell and json
         printDoubleList :: {-Handle ->-} [Double] -> IO ()
         printDoubleList {-handle-} []    = return ()
@@ -314,5 +314,3 @@ printBagelBasisList handle basises = do
         printDoubleList {-handle-} (a:b) = do
             hPrintf handle "%.7F, " a
             printDoubleList {-handle-} b
-        
-
