@@ -46,3 +46,19 @@ data AO = AO { ao_n :: Int
 
 -- a molecular orbital can be described by MO coefficients (LCAO coefficients)
 type MO = BLAS.Vector Double
+
+
+{- ############ -}
+{- calculations -}
+{- ############ -}
+-- give a list of weighted MOs and get back a new MO built of these and renormalized
+mixMOs :: [(Double, MO)] -> MO
+mixMOs lcl = newWMO
+  where
+    norm = sum . map fst $ lcl
+    normCoeffs = map (/ norm). map fst $ lcl :: [Double]
+    mos = map snd lcl :: [MO]
+    rlcl = zip normCoeffs mos :: [(Double, MO)]
+    nBF = length . BLAS.toList . head $ mos
+    zeroMO = BLAS.fromList $ replicate nBF 0.0 :: MO
+    newWMO = foldr (\(c, m) acc -> BLAS.fromList [c] * m + acc) zeroMO rlcl
