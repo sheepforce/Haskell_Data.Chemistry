@@ -61,22 +61,22 @@ data Molden = Molden { -- atoms contains the geometry
 moldenParser :: Parser Molden
 moldenParser = do
     -- it all began with "[Molden Format]" ...
-    _ <- string $ T.pack "[Molden Format]"
+    _ <- asciiCI $ T.pack "[Molden Format]"
 
     -- possibly there is a "[Title]" block (ORCA, Janpa)
-    skipSpace
-    _ <- maybeOption moldenTITLE
+    --skipSpace
+    -- _ <- maybeOption moldenTITLE
 
     -- parse the "[Atoms]" block, containing the geometry informations
-    skipSpace
+    --skipSpace
     atoms_p <- moldenATOMS
 
     -- parse the "[GTO]" block
-    skipSpace
+    --skipSpace
     basfuns_p <- moldenGTO
 
     -- parse the "[MO]" block
-    skipSpace
+    --skipSpace
     mmos_p <- moldenMO
 
     -- return the results
@@ -88,7 +88,7 @@ moldenParser = do
 moldenTITLE :: Parser String
 moldenTITLE = do
     -- it starts with the "[Title]"
-    _ <- string $ T.pack "[Title]"
+    _ <- manyTill anyChar (asciiCI $ T.pack "[Title]")
     skipSpace
     title_p <- manyTill anyChar endOfLine
 
@@ -98,7 +98,7 @@ moldenTITLE = do
 moldenATOMS :: Parser (Units, [MoldenCoord])
 moldenATOMS = do
     -- it starts with the "[Atoms]" block
-    _ <- string $ T.pack "[Atoms]"
+    _ <- manyTill anyChar (asciiCI $ T.pack "[Atoms]")
 
     -- parse the units. Maybe AU/(AU) or Angs/(Angs)
     skipSpace
@@ -151,10 +151,14 @@ moldenATOMS = do
                                , moco_coord = (x_p, y_p, z_p)
                                }
 
+
 moldenGTO :: Parser [[BasFun]]
 moldenGTO = do
     -- it starts with the "[GTO]" block
-    _ <- string $ T.pack "[GTO]"
+    _ <- manyTill anyChar (asciiCI $ T.pack "[GTO]")
+
+    -- possibly there is also a unit here
+    _ <- manyTill anyChar endOfLine
 
     -- parse the basis functions of an atom
     skipSpace
@@ -162,11 +166,11 @@ moldenGTO = do
 
     -- parse the informations about coordinate system
     skipSpace
-    _ <- maybeOption (string $ T.pack "[5D]")
+    _ <- maybeOption (asciiCI $ T.pack "[5D]")
     skipSpace
-    _ <- maybeOption (string $ T.pack "[7F]")
+    _ <- maybeOption (asciiCI $ T.pack "[7F]")
     skipSpace
-    _ <- maybeOption (string $ T.pack "[9G]")
+    _ <- maybeOption (asciiCI $ T.pack "[9G]")
     skipSpace
 
     -- return the results (basis functions atomwise)
@@ -192,7 +196,7 @@ moldenGTO = do
 
             -- the zero at the end
             skipSpace
-            _ <- char '0'
+            _ <- maybeOption (char '0')
             skipSpace
 
             -- parse the basis functions of the given atom
@@ -213,7 +217,7 @@ moldenGTO = do
             -- parse the angular momentum of this basis function
             skipSpace
             angular_p <- do
-                angular_char <- anyChar
+                angular_char <- letter
                 return $ orb2AngMom angular_char
 
             -- number of PGTOs to experct
@@ -222,7 +226,7 @@ moldenGTO = do
 
             -- parse the zero or other number till the endOfLine
             skipSpace
-            _ <- manyTill anyChar $ char ' ' <|> char '\n'
+            _ <- maybeOption (manyTill anyChar $ char ' ' <|> char '\n')
 
             -- parse the PGTOs line by line and make a CGTO of them
             skipSpace
@@ -250,7 +254,8 @@ moldenMO :: Parser [MMO]
 moldenMO = do
     -- it starts with the "[Atoms]" block
     skipSpace
-    _ <- string $ T.pack "[MO]"
+
+    _ <- manyTill anyChar (asciiCI $ T.pack "[MO]")
 
     -- parse the MOs
     skipSpace
@@ -272,13 +277,13 @@ moldenMO = do
 
             -- parse the "Ene" statement
             skipSpace
-            _ <- string $ T.pack "Ene="
+            _ <- asciiCI $ T.pack "Ene="
             skipSpace
             ene_p <- double
 
             -- parse the "Spin" statement
             skipSpace
-            _ <- string $ T.pack "Spin="
+            _ <- asciiCI $ T.pack "Spin="
             skipSpace
             spin_p <- do
                 spin_raw <- manyTill anyChar $ (char ' ') <|> (char '\n')
@@ -288,7 +293,7 @@ moldenMO = do
 
             -- parse the "Occup" statement
             skipSpace
-            _ <- string $ T.pack "Occup="
+            _ <- asciiCI $ T.pack "Occup="
             skipSpace
             occup_p <- double
 
@@ -309,7 +314,7 @@ moldenMO = do
         -- wrap the symmetry parser in an optional statement, so it can be optional
         symParse :: Parser String
         symParse = do
-            _ <- string $ T.pack "Sym="
+            _ <- asciiCI $ T.pack "Sym="
             skipSpace
             sym_p <- manyTill anyChar $ char ' ' <|> char '\n'
 
@@ -364,7 +369,7 @@ bf2aos_sph bf
                             , ao_r = cgto
                             } | i <- [(-1), 0 , 1]
                        ]
-    -- this is the molden spherical ordering for
+    -- this is the molden spherical ordering for d
     | bf_angmom == 2 = [ AO { ao_n = 0
                             , ao_l = bf_angmom
                             , ao_m = i
@@ -384,6 +389,12 @@ bf2aos_sph bf
                             , ao_m = i
                             , ao_r = cgto
                             } | i <- [0, 1, (-1), 2, (-2), 3, (-3), 4, (-4)]
+                       ]
+    | bf_angmom == 5 = [ AO { ao_n = 0
+                            , ao_l = bf_angmom
+                            , ao_m = i
+                            , ao_r = cgto
+                            } | i <- [0, 1, (-1), 2, (-2), 3, (-3), 4, (-4), 5, (-5)]
                        ]
     | otherwise = error "Molden does not support functions higher than g"
     where bf_angmom = basfun_angular bf
@@ -437,3 +448,96 @@ fillLLwithPos a = concat [Prelude.take (length $ a !! i) $ repeat i | i <- [0 ..
 -- Make a parser optional, return Nothing if there is no match
 maybeOption :: Parser a -> Parser (Maybe a)
 maybeOption p = option Nothing (Just <$> p)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{- parse the basis functions for a complete atom, for example
+    2  0
+  s      3  0
+        13.0100000000         0.0334987264
+         1.9620000000         0.2348008012
+         0.4446000000         0.8136829579
+  s      1  0
+         0.1220000000         1.0000000000
+  p      1  0
+         0.7270000000         1.0000000000
+-}
+moldenGTOAtomParser :: Parser [BasFun]
+moldenGTOAtomParser = do
+    -- parse the atom number, on which the basis functions are centred
+    skipSpace
+    _ <- (decimal :: Parser Int)
+
+    -- the zero at the end
+    skipSpace
+    _ <- maybeOption (char '0')
+    skipSpace
+
+    -- parse the basis functions of the given atom
+    basfunsAtom_p <- many1 moldenGTOAtomBFParser
+
+    --return the result
+    return basfunsAtom_p
+
+
+{- parse a single basis function for a given atom
+  s      3  0
+        13.0100000000         0.0334987264
+         1.9620000000         0.2348008012
+         0.4446000000         0.8136829579
+-}
+moldenGTOAtomBFParser :: Parser BasFun
+moldenGTOAtomBFParser = do
+    -- parse the angular momentum of this basis function
+    skipSpace
+    angular_p <- do
+        angular_char <- letter
+        return $ orb2AngMom angular_char
+
+    -- number of PGTOs to experct
+    skipSpace
+    npgto_p <- decimal
+
+    -- parse the zero or other number till the endOfLine
+    skipSpace
+    _ <- maybeOption (manyTill anyChar $ char ' ' <|> char '\n')
+
+    -- parse the PGTOs line by line and make a CGTO of them
+    skipSpace
+    cgto_p <- count npgto_p pgto_and_ContrCoeff
+
+    return $ BasFun { basfun_angular = angular_p
+                    , basfun_radial = cgto_p
+                    }
+
+-- parse a single pgto and its contraction coefficient
+pgto_and_ContrCoeff :: Parser (PGTO, ContrCoeff)
+pgto_and_ContrCoeff = do
+    -- parse the exponent
+    skipSpace
+    pgto_p <- double
+
+    -- parse the contraction coefficient
+    skipSpace
+    contrcoeff_p <- double
+
+    -- return the result
+    return $ (pgto_p, contrcoeff_p)
