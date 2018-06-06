@@ -19,8 +19,8 @@ write_Molden molden =
   "[Molden Format]" ++ "\n" ++
 
   -- title is not of intereset and therefore empty
-  "[Title]" ++ "\n" ++
-  "\n" ++
+  -- "[Title]" ++ "\n" ++
+  -- "\n" ++
 
   -- the [Atoms] section with the coordinates
   "[Atoms] " ++
@@ -34,9 +34,9 @@ write_Molden molden =
     ( map (\(n, a) -> printf "%-3s    " (a ^. moldenCoord_element) ++
                       printf "%4d     " n ++
                       printf "%4d     " (a ^. moldenCoord_nproton) ++
-                      printf "%+14.8E    " (a ^. moldenCoord_coord . _1) ++
-                      printf "%+14.8E    " (a ^. moldenCoord_coord . _2) ++
-                      printf "%+14.8E    " (a ^. moldenCoord_coord . _3) ++
+                      printf "%14.8F    " (a ^. moldenCoord_coord . _1) ++
+                      printf "%14.8F    " (a ^. moldenCoord_coord . _2) ++
+                      printf "%14.8F    " (a ^. moldenCoord_coord . _3) ++
                       "\n"
           ) numbAtoms
     ) ++ "\n" ++
@@ -67,7 +67,7 @@ write_Molden molden =
     moWriter :: MoldenMO -> String
     moWriter mo =
       "Sym= " ++ (mo ^. moldenMO_sym) ++ "\n" ++
-      "Ene= " ++ printf "%20.10E" (mo ^. moldenMO_energy) ++ "\n" ++
+      "Ene= " ++ printf "%20.10F" (mo ^. moldenMO_energy) ++ "\n" ++
       "Spin= " ++ show (mo ^. moldenMO_spin) ++ "\n" ++
       "Occup= " ++ printf "%8.6F" (mo ^. moldenMO_occup) ++ "\n" ++
       concat

@@ -139,7 +139,7 @@ mixMMOs molden wMOList = newMolden
       { _moldenMO_sym    = "c1"
       , _moldenMO_energy = 0.0
       , _moldenMO_spin   = Alpha
-      , _moldenMO_occup  = 0.0
+      , _moldenMO_occup  = 2.0
       , _moldenMO_coeffs = newMOCoeffs
       }
     newMolden = molden & molden_mos .~ [ newMMO ]
