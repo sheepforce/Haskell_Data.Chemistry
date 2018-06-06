@@ -1,10 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Data.Chemistry.Molden
-( MoldenCoord(..)
-, MMO(..)
-, Molden(..)
-, moldenParser
-, n_e
+( n_e
 , n_BF
 , angMom_BF
 , bf2aos_sph
@@ -15,355 +11,29 @@ module Data.Chemistry.Molden
 , getMOcoeffsForBFinOrb
 , mixMMOs
 ) where
-import           Control.Applicative
-import           Data.Attoparsec.Text.Lazy
-import           Data.Chemistry.BasisSet
+import           Data.Chemistry.Types
 import           Data.Chemistry.Wavefunction
 import           Data.List
-import           Data.Maybe
-import qualified Data.Text                   as T
 import           Lens.Micro.Platform
 import qualified Numeric.LinearAlgebra       as BLAS
-import           Text.Printf
 
 
-{- ############################ -}
-{- define data types for Molden -}
-{- ############################ -}
-
--- units for geometry may either be Angstrom or Bohr
-data Units  = Angstrom | Bohr deriving (Show, Eq)
---
--- a data type for the geometry informations in a molden [Atoms] block
-data MoldenCoord = MoldenCoord
-  { _moco_element :: String
-  , _moco_natom   :: Int
-  , _moco_nproton :: Int
-  , _moco_coord   :: (Double, Double, Double)
-  } deriving Show
-makeLenses ''MoldenCoord
-
--- extended data type for MOs in a Molden-File
-data MMO = MMO
-  { _sym    :: String
-  , _energy :: Double
-  , _spin   :: Spin
-  , _occup  :: Double
-  , _coeffs :: MO
-  } deriving Show
-makeLenses ''MMO
-
--- contents of a Molden file
-data Molden = Molden
-  { -- atoms contains the geometry
-    _atoms   :: (Units, [MoldenCoord])
-   -- the basis functions, outer for the atom, inner for gto
-  , _basfuns :: [[BasFun]]
-  , _mos     :: [MMO]
-  } deriving Show
-makeLenses ''Molden
-
-
-{- ###### -}
-{- Parser -}
-{- ###### -}
-
-moldenParser :: Parser Molden
-
-moldenParser = do
-    -- it all began with "[Molden Format]" ...
-    _ <- asciiCI $ T.pack "[Molden Format]"
-
-    -- possibly there is a "[Title]" block (ORCA, Janpa)
-    --skipSpace
-    -- _ <- maybeOption moldenTITLE
-
-    -- parse the "[Atoms]" block, containing the geometry informations
-    --skipSpace
-    atoms_p <- moldenATOMS
-
-    -- parse the "[GTO]" block
-    --skipSpace
-    basfuns_p <- moldenGTO
-
-    -- parse the "[MO]" block
-    --skipSpace
-    mmos_p <- moldenMO
-
-    -- return the results
-    return Molden { _atoms = atoms_p
-                  , _basfuns = basfuns_p
-                  , _mos = mmos_p
-                  }
-
-moldenTITLE :: Parser String
-moldenTITLE = do
-    -- it starts with the "[Title]"
-    _ <- manyTill anyChar (asciiCI $ T.pack "[Title]")
-    skipSpace
-    title_p <- manyTill anyChar endOfLine
-
-    return title_p
-
-
-moldenATOMS :: Parser (Units, [MoldenCoord])
-moldenATOMS = do
-    -- it starts with the "[Atoms]" block
-    _ <- manyTill anyChar (asciiCI $ T.pack "[Atoms]")
-
-    -- parse the units. Maybe AU/(AU) or Angs/(Angs)
-    skipSpace
-    units_p <- do
-        units_raw <- manyTill anyChar endOfLine
-        if (T.isInfixOf (T.toLower . T.pack $ units_raw) (T.pack "(au)") == True)
-           then return Bohr
-           else return Angstrom
-
-    -- the geometry line by line
-    skipSpace
-    geom <- many1 moldenCoordLineParser
-
-    -- return the results
-    return (units_p, geom)
-
-    where
-        -- parse a coordinate line in a [Atoms] block
-        moldenCoordLineParser :: Parser MoldenCoord
-        moldenCoordLineParser = do
-            -- parse the atomic symbol
-            skipSpace
-            element_p <- manyTill anyChar (char ' ')
-
-            -- parse the number of the atom in the molecule
-            skipSpace
-            natom_p <- decimal
-
-            -- parse the atomic number (aka number of protons)
-            skipSpace
-            nproton_p <- decimal
-
-            -- the x coordinate
-            skipSpace
-            x_p <- double
-
-            -- the y coordinate
-            skipSpace
-            y_p <- double
-
-            -- the z coordinate
-            skipSpace
-            z_p <- double
-
-            --skipSpace
-            -- return the results
-            return MoldenCoord { _moco_element = element_p
-                               , _moco_natom = natom_p
-                               , _moco_nproton = nproton_p
-                               , _moco_coord = (x_p, y_p, z_p)
-                               }
-
-
-moldenGTO :: Parser [[BasFun]]
-moldenGTO = do
-    -- it starts with the "[GTO]" block
-    _ <- manyTill anyChar (asciiCI $ T.pack "[GTO]")
-
-    -- possibly there is also a unit here
-    _ <- manyTill anyChar endOfLine
-
-    -- parse the basis functions of an atom
-    skipSpace
-    basfuns_p <- many1 moldenGTOAtomParser
-
-    -- parse the informations about coordinate system
-    skipSpace
-    _ <- maybeOption (asciiCI $ T.pack "[5D]")
-    skipSpace
-    _ <- maybeOption (asciiCI $ T.pack "[7F]")
-    skipSpace
-    _ <- maybeOption (asciiCI $ T.pack "[9G]")
-    skipSpace
-
-    -- return the results (basis functions atomwise)
-    return basfuns_p
-
-    where
-        {- parse the basis functions for a complete atom, for example
-            2  0
-          s      3  0
-                13.0100000000         0.0334987264
-                 1.9620000000         0.2348008012
-                 0.4446000000         0.8136829579
-          s      1  0
-                 0.1220000000         1.0000000000
-          p      1  0
-                 0.7270000000         1.0000000000
-        -}
-        moldenGTOAtomParser :: Parser [BasFun]
-        moldenGTOAtomParser = do
-            -- parse the atom number, on which the basis functions are centred
-            skipSpace
-            _ <- (decimal :: Parser Int)
-
-            -- the zero at the end
-            skipSpace
-            _ <- maybeOption (char '0')
-            skipSpace
-
-            -- parse the basis functions of the given atom
-            basfunsAtom_p <- many1 moldenGTOAtomBFParser
-
-            --return the result
-            return basfunsAtom_p
-
-
-        {- parse a single basis function for a given atom
-          s      3  0
-                13.0100000000         0.0334987264
-                 1.9620000000         0.2348008012
-                 0.4446000000         0.8136829579
-        -}
-        moldenGTOAtomBFParser :: Parser BasFun
-        moldenGTOAtomBFParser = do
-            -- parse the angular momentum of this basis function
-            skipSpace
-            angular_p <- do
-                angular_char <- letter
-                return $ orb2AngMom angular_char
-
-            -- number of PGTOs to experct
-            skipSpace
-            npgto_p <- decimal
-
-            -- parse the zero or other number till the endOfLine
-            skipSpace
-            _ <- maybeOption (manyTill anyChar $ char ' ' <|> char '\n')
-
-            -- parse the PGTOs line by line and make a CGTO of them
-            skipSpace
-            cgto_p <- count npgto_p pgto_and_ContrCoeff
-
-            return $ BasFun { _basfun_angular = angular_p
-                            , _basfun_radial = cgto_p
-                            }
-
-        -- parse a single pgto and its contraction coefficient
-        pgto_and_ContrCoeff :: Parser (PGTO, ContrCoeff)
-        pgto_and_ContrCoeff = do
-            -- parse the exponent
-            skipSpace
-            pgto_p <- double
-
-            -- parse the contraction coefficient
-            skipSpace
-            contrcoeff_p <- double
-
-            -- return the result
-            return $ (pgto_p, contrcoeff_p)
-
-moldenMO :: Parser [MMO]
-moldenMO = do
-    -- it starts with the "[Atoms]" block
-    skipSpace
-
-    _ <- manyTill anyChar (asciiCI $ T.pack "[MO]")
-
-    -- parse the MOs
-    skipSpace
-    mmos <- many1 singleMMOParser
-
-    -- return the results
-    return mmos
-
-    where
-        singleMMOParser :: Parser MMO
-        singleMMOParser = do
-            -- parse the "Sym" statement
-            skipSpace
-            sym_p <- do
-                sym_temp <- maybeOption symParse
-                if (isNothing sym_temp == True)
-                   then return "e"
-                   else return $ fromJust sym_temp
-
-            -- parse the "Ene" statement
-            skipSpace
-            _ <- asciiCI $ T.pack "Ene="
-            skipSpace
-            ene_p <- double
-
-            -- parse the "Spin" statement
-            skipSpace
-            _ <- asciiCI $ T.pack "Spin="
-            skipSpace
-            spin_p <- do
-                spin_raw <- manyTill anyChar $ (char ' ') <|> (char '\n')
-                if (spin_raw == "Alpha")
-                   then return Alpha
-                   else return Beta
-
-            -- parse the "Occup" statement
-            skipSpace
-            _ <- asciiCI $ T.pack "Occup="
-            skipSpace
-            occup_p <- double
-
-            -- parse the MO coefficients in the AO expansion
-            skipSpace
-            coeffs_p <- do
-                coeffs_raw <- many1 coeff_lineParser
-                return $ BLAS.fromList coeffs_raw
-
-            -- return the results
-            return MMO { _sym = sym_p
-                       , _energy = ene_p
-                       , _spin = spin_p
-                       , _occup = occup_p
-                       , _coeffs = coeffs_p
-                       }
-
-        -- wrap the symmetry parser in an optional statement, so it can be optional
-        symParse :: Parser String
-        symParse = do
-            _ <- asciiCI $ T.pack "Sym="
-            skipSpace
-            sym_p <- manyTill anyChar $ char ' ' <|> char '\n'
-
-            return $ sym_p
-
-
-        -- parse a single line of the coefficients in the [MO] block for a single MO
-        coeff_lineParser :: Parser Double
-        coeff_lineParser = do
-            -- not interested in the first number (label of basis function)
-            skipSpace
-            _ <- (decimal :: Parser Int)
-
-            -- but parse the mo coefficient
-            skipSpace
-            single_mo_coeff_p <- double
-
-            -- return the result
-            return single_mo_coeff_p
-
-
-{- ####################################### -}
-{- Functions for working with molden files -}
-{- ####################################### -}
-
--- get the overall number of electrons in the molecule
+--------------------------------------------------------------------------------
+-- working with molden files
+--------------------------------------------------------------------------------
+-- | Get the overall number of electrons in the molecule
 n_e :: Molden -> Double
-n_e molden = sum . map _occup . _mos $ molden
+n_e molden = sum . map _moldenMO_occup $ (molden ^. molden_mos)
 
--- get the overall number of basis functions in a molden file
+-- | Get the overall number of basis functions in a molden file
 n_BF :: Molden -> Int
-n_BF molden = length . concat . _basfuns $ molden
+n_BF molden = length . concat $ molden ^. molden_basfuns
 
--- atomwise list of angular momentums for the basis functions
+-- | Atomwise list of angular momentums for the basis functions
 angMom_BF:: Molden -> [[Int]]
-angMom_BF molden = map (map _basfun_angular) $ _basfuns molden
+angMom_BF molden = map (map _basfun_angular) $ _molden_basfuns molden
 
--- give in a basis function and you will get atomic orbitals from it in molden ordering
+-- | Give in a basis function and you will get atomic orbitals from it in molden ordering
 bf2aos_sph :: BasFun -> [AO]
 bf2aos_sph bf
     -- this is the molden spherical ordering for s
@@ -411,54 +81,45 @@ bf2aos_sph bf
     where bf_angmom = _basfun_angular bf
           cgto = _basfun_radial bf
 
--- from the basis functions expand in the AOs
--- ordering of the list
---   atom
---     Hauptquantenzahl, Nebequantenzahl (e.g. 1s / 2s / 3d / 4f / 5f)
---       Magnetquantenzahl
+-- | from the basis functions expand in the AOs
+-- | ordering of the list
+-- |   atom
+-- |     Hauptquantenzahl, Nebequantenzahl (e.g. 1s / 2s / 3d / 4f / 5f)
+-- |       Magnetquantenzahl
 basis2AtomicOrbitals :: Molden -> [[[AO]]]
 basis2AtomicOrbitals molden = mol_ao
     where
         -- the basis functions atomwise
-        mol_bf = molden ^. basfuns
+        mol_bf = molden ^. molden_basfuns
 
         -- get angular momentums of the basis functions atomwise
         mol_ao = map (map bf2aos_sph) mol_bf
 
--- the order of the MOs in the basis of the AOs (giving angular momentum here)
+-- | The order of the MOs in the basis of the AOs (giving angular momentum here)
 moOrderingInAngMom :: Molden -> [Int]
 moOrderingInAngMom molden = concat . concat . map (map (map _ao_l)) . basis2AtomicOrbitals $ molden
 
--- the order of the MOs in the basis of the AOs (giving in corresponding atom)
+-- | The order of the MOs in the basis of the AOs (giving in corresponding atom)
 moOrderingInAtoms :: Molden -> [Int]
 moOrderingInAtoms molden =  fillLLwithPos . map concat . basis2AtomicOrbitals $ molden
 
--- the order of the MOs in the basis of the AOs (given in corresponding basis functions)
+-- | The order of the MOs in the basis of the AOs (given in corresponding basis functions)
 moOrderingInBF :: Molden -> [Int]
 moOrderingInBF molden = fillLLwithPos . concat . map (map (map _ao_l)) . basis2AtomicOrbitals $ molden
 
--- get MO coefficients (sum over AOs with same n and l but different m)
--- for a specific basis function in a molecular orbital
+-- | Get MO coefficients (sum over AOs with same n and l but different m)
+-- | for a specific basis function in a molecular orbital
 getMOcoeffsForBFinOrb :: Int -> Int -> Int -> Molden -> Double
 getMOcoeffsForBFinOrb mo_number bf_number angMomOfBF molden
-    | isInfixOf listIndexForBF listIndexForAngMom == True = sum coeffs_for_BF
+    |  listIndexForBF `isInfixOf` listIndexForAngMom = sum coeffs_for_BF
     | otherwise = error "the desired angular momentum does not belong to the specified basis function"
     where
-        mocoeffs = _coeffs $ (_mos molden) !! mo_number
+        mocoeffs = _moldenMO_coeffs $ (molden ^. molden_mos) !! mo_number
         bfIndexList = moOrderingInBF molden
         angMomIndexList = moOrderingInAngMom molden
         listIndexForBF = findIndices (== bf_number) bfIndexList
         listIndexForAngMom = findIndices (== angMomOfBF) angMomIndexList
         coeffs_for_BF = [mocoeffs BLAS.! i | i <- listIndexForBF]
-
--- take a nested list and fills the inner entries with its position in the outer index, than flatten
--- [[1,2,3,4], [5,6,7]] -> [0,0,0,0,1,1,1]
-fillLLwithPos :: [[a]] -> [Int]
-fillLLwithPos a = concat [Prelude.take (length $ a !! i) $ repeat i | i <- [0 .. ((length a) - 1)]]
-
--- Make a parser optional, return Nothing if there is no match
-maybeOption :: Parser a -> Parser (Maybe a)
-maybeOption p = option Nothing (Just <$> p)
 
 
 --------------------------------------------------------------------------------
@@ -471,142 +132,23 @@ mixMMOs molden wMOList = newMolden
   where
     orbWeights = map fst wMOList
     orbIndices = map snd wMOList
-    orbs2Mix = [ map _coeffs (molden ^. mos) !! i | i <- orbIndices ]
+    orbs2Mix = [ map _moldenMO_coeffs (molden ^. molden_mos) !! i | i <- orbIndices ]
     linearCombList = zip orbWeights orbs2Mix
     newMOCoeffs = mixMOs linearCombList
-    newMMO = MMO
-      { _sym    = "c1"
-      , _energy = 0.0
-      , _spin   = Alpha
-      , _occup  = 0.0
-      , _coeffs = newMOCoeffs
+    newMMO = MoldenMO
+      { _moldenMO_sym    = "c1"
+      , _moldenMO_energy = 0.0
+      , _moldenMO_spin   = Alpha
+      , _moldenMO_occup  = 0.0
+      , _moldenMO_coeffs = newMOCoeffs
       }
-    newMolden = molden & mos .~ [ newMMO ]
+    newMolden = molden & molden_mos .~ [ newMMO ]
 
 
 --------------------------------------------------------------------------------
--- Writing Molden files
+-- non specific helper functions
 --------------------------------------------------------------------------------
-write_Molden :: Molden -> String
-write_Molden molden =
-  -- begin with oblgigatory header
-  "[Molden Format]" ++ "\n" ++
-
-  -- title is not of intereset and therefore empty
-  "[Title]" ++ "\n" ++
-  "\n" ++
-
-  -- the [Atoms] section with the coordinates
-  "[Atoms] " ++
-  printf "%-4s  "
-    ( if (fst (molden ^. atoms) == Bohr)
-      then "AU"
-      else "Angs"
-    ) ++
-  "\n" ++
-  concat
-    ( map (\(n, a) -> printf "%-3s    " (a ^. moco_element) ++
-                      printf "%4d     " n ++
-                      printf "%4d     " (a ^. moco_nproton) ++
-                      printf "%+14.8E    " (a ^. moco_coord . _1) ++
-                      printf "%+14.8E    " (a ^. moco_coord . _2) ++
-                      printf "%+14.8E    " (a ^. moco_coord . _3) ++
-                      "\n"
-          ) numbAtoms
-    ) ++ "\n" ++
-
-  -- the [GTO] section with the basis functions
-  "[GTO]" ++ "\n" ++
-  concat
-    ( map (\(n, bfs) -> printf "  %4d  " n ++ "0\n" ++
-                        basFunsWriter bfs ++ "\n"
-          ) numbBasFuns
-    ) ++
-  "[5D]\n" ++
-  -- "[7F]\n" ++
-  "[9G]\n" ++
-  "\n" ++
-
-  -- the [MO] section with the molecular orbitals
-  "[MO]\n" ++
-  concat (map moWriter orbs)
-  where
-    mAtoms = snd $ molden ^. atoms
-    atomIndRange = [ 1 .. length mAtoms ]
-    numbAtoms = zip atomIndRange mAtoms
-    numbBasFuns = zip atomIndRange (molden ^. basfuns)
-    orbs = molden ^. mos
-
--- | write an MO
-moWriter :: MMO -> String
-moWriter mo =
-  "Sym= " ++ (mo ^. sym) ++ "\n" ++
-  "Ene= " ++ (printf "%20.10E" (mo ^. energy)) ++ "\n" ++
-  "Spin= " ++ show (mo ^. spin) ++ "\n" ++
-  "Occup= " ++ (printf "%8.6F" (mo ^. occup)) ++ "\n" ++
-  concat
-    ( map (\(n, c) -> printf "%5d        " n ++
-                      printf "%20.16F    " c ++ "\n"
-          ) numbCoeffs
-    )
-  where
-    coeffIndRange = [1 .. ( length . BLAS.toList $ (mo ^. coeffs))]
-    numbCoeffs = zip coeffIndRange (BLAS.toList $ mo ^. coeffs)
-
-
-
--- | Write all basis functions of an atom. Results for example in
-{-
-s  1  1.0
-        0.9059000000            1.0000000000
-s  1  1.0
-        0.1285000000            1.0000000000
-p  5  1.0
-       18.7100000000            0.0140309984
-        4.1330000000            0.0868659900
-        1.2000000000            0.2902159662
-        0.3827000000            0.5010079423
-        0.1209000000            0.3434059602
-p  1  1.0
-        0.3827000000            1.0000000000
-p  1  1.0
-        0.1209000000            1.0000000000
-d  1  1.0
-        1.0970000000            1.0000000000
-d  1  1.0
-        0.3180000000            1.0000000000
-f  1  1.0
-        0.7610000000            1.0000000000
--}
-basFunsWriter :: [BasFun] -> String
-basFunsWriter bfs =
-  concat . map basFunWriter $ bfs
-
--- | Write a single basis function. A basis function contains many nPrimitives
--- | Results for example in
-{-
-s  10 1.0
-     8236.0000000000         0.0005309999
-     1235.0000000000         0.0041079989
-      280.8000000000         0.0210869945
-       79.2700000000         0.0818529787
-       25.5900000000         0.2348169389
-        8.9970000000         0.4344008868
-        3.3190000000         0.3461289099
-        0.9059000000         0.0393779897
-        0.3643000000        -0.0089829977
-        0.1285000000         0.0023849994
--}
-basFunWriter :: BasFun -> String
-basFunWriter bf =
-  [angmomString] ++ "  " ++ show nPrimitives ++ "  1.0\n" ++
-  concat
-    ( map (\(e, c) -> printf "%20.10F    " e ++
-                      printf "%20.10F\n"   c
-          ) radialPrimitives
-    )
-  where
-    angmom = bf ^. basfun_angular
-    angmomString = angMom2Orb angmom
-    nPrimitives = length (bf ^. basfun_radial)
-    radialPrimitives = bf ^. basfun_radial
+-- | take a nested list and fills the inner entries with its position in the outer index, than flatten
+-- | [[1,2,3,4], [5,6,7]] -> [0,0,0,0,1,1,1]
+fillLLwithPos :: [[a]] -> [Int]
+fillLLwithPos a = concat [Prelude.take (length $ a !! i) $ repeat i | i <- [0 .. ((length a) - 1)]]

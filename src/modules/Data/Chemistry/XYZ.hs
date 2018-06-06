@@ -5,106 +5,43 @@ module Data.Chemistry.XYZ
 , getNAtoms
 , getElements
 , getCoords
-, printXYZ
 , coord2Mat
 , mat2Coord
 , interpolate
 , align
 ) where
-import           Data.Attoparsec.Text.Lazy
-import qualified Numeric.LinearAlgebra     as BLAS
-import           System.IO
-import           Text.Printf
+import           Data.Chemistry.Parser
+import           Data.Chemistry.Types
+import           Lens.Micro.Platform
+import qualified Numeric.LinearAlgebra as BLAS
 
-
-{- ################# -}
-{- define Data Types -}
-{- ################# -}
-
-data XYZ = XYZ { nAtoms     :: Int
-               , comment    :: String
-               , xyzcontent :: [(String,Double,Double,Double)]
-               } deriving Show
-
-{- ###### -}
-{- Parser -}
-{- ###### -}
-
-xyzParser :: Parser XYZ
-xyzParser = do
-  skipSpace
-  nAtoms_parse <- decimal
-  _ <- manyTill anyChar endOfLine
-  comment_parse <- manyTill anyChar endOfLine
-  --coordinates <- many' xyzCoordLineParser
-  coordinates <- count nAtoms_parse xyzCoordLineParser
-  -- _ <- endOfLine <|> endOfInput
-  return XYZ { nAtoms = nAtoms_parse
-             , comment = comment_parse
-             , xyzcontent = coordinates
-             }
-    where
-      xyzCoordLineParser :: Parser (String,Double,Double,Double)
-      xyzCoordLineParser = do
-        skipSpace
-        element <- manyTill anyChar (char ' ')
-        skipSpace
-        x <- double
-        skipSpace
-        y <- double
-        skipSpace
-        z <- double
-        skipSpace
-        _ <- many' endOfLine
-        return (element,x,y,z)
-
-xyzTrajParser :: Parser [XYZ]
-xyzTrajParser = do
-    trajectory <- many' xyzParser
-    return trajectory
-
-
-{- ################################ -}
-{- Functions to work with XYZ files -}
-{- ################################ -}
 
 getNAtoms :: XYZ -> Int
-getNAtoms a = nAtoms a
+getNAtoms a = _xyz_nAtoms a
 
 getElement :: (String,Double,Double,Double) -> String
 getElement (e, _, _, _) = e
 
 getElements :: XYZ -> [String]
-getElements a = map getElement $ xyzcontent a
+getElements a = map getElement $ a ^. xyz_xyzcontent
 
 getCoord :: (String,Double,Double,Double) -> (Double,Double,Double)
 getCoord (_, x, y, z) = (x, y, z)
 
 getCoords :: XYZ -> [(Double,Double,Double)]
-getCoords a = map getCoord $ xyzcontent a
+getCoords a = map getCoord $ a ^. xyz_xyzcontent
 
--- print XYZ formated to a handle
--- using mapM_ over a list enables printing a trajectory
-printXYZ :: Handle -> XYZ ->  IO ()
-printXYZ xyzhandle xyz = do
-    hPrint xyzhandle $ nAtoms xyz
-    hPrint xyzhandle $ comment xyz
-    mapM_ (\(e, x, y, z) -> do
-        hPrintf xyzhandle "%-4s" e
-        hPrintf xyzhandle "%+16.8f    " x
-        hPrintf xyzhandle "%+16.8f    " y
-        hPrintf xyzhandle "%+16.8f\n" z) (xyzcontent xyz)
-
--- generate HMatrix Matrix of coordinates
+-- | Generate HMatrix Matrix of coordinates
 coord2Mat :: XYZ -> BLAS.Matrix Double
-coord2Mat a = (nAtoms a BLAS.>< 3) $ concat . map (\(x, y, z) -> [x, y, z]) $ getCoords a
+coord2Mat a = (_xyz_nAtoms a) BLAS.>< 3 $ concat . map (\(x, y, z) -> [x, y, z]) $ getCoords a
 
--- fill XYZ with coordinates from a matrix (replacing the old ones)
+-- | Fill XYZ with coordinates from a matrix (replacing the old ones)
 mat2Coord :: XYZ -> BLAS.Matrix Double -> XYZ
-mat2Coord a mat = XYZ { nAtoms = (nAtoms a)
-                      , comment = (comment a)
-                      , xyzcontent = content
-                      }
+mat2Coord a mat = XYZ
+  { _xyz_nAtoms = (a ^. xyz_nAtoms)
+  , _xyz_comment = (a ^. xyz_comment)
+  , _xyz_xyzcontent = content
+  }
     where
         content = zipWith (\e (x, y, z) -> (e, x, y, z)) (getElements a) coords
         coords = (listList2TupleList . BLAS.toLists) mat
@@ -112,7 +49,11 @@ mat2Coord a mat = XYZ { nAtoms = (nAtoms a)
         listList2TupleList :: [[Double]] -> [(Double, Double, Double)]
         listList2TupleList listlist = map (\[x,y,z] -> (x,y,z)) listlist
 
--- interpolate two geometries in cartesian coordinates
+
+--------------------------------------------------------------------------------
+-- Working with XYZ files
+--------------------------------------------------------------------------------
+-- | interpolate two geometries in cartesian coordinates
 interpolate :: Int -> XYZ -> XYZ -> [XYZ]
 interpolate nImages mol1 mol2 = map (mat2Coord mol1) interpol_mats
     where
@@ -120,10 +61,10 @@ interpolate nImages mol1 mol2 = map (mat2Coord mol1) interpol_mats
         mol1_coordMat = coord2Mat mol1
         mol2_coordMat = coord2Mat mol2
 
--- align molecule by three atoms
--- first goes to the origin
--- second goes to the z axis
--- third goes to the xz plane
+-- | align molecule by three atoms
+-- | first goes to the origin
+-- | second goes to the z axis
+-- | third goes to the xz plane
 align :: (Int, Int, Int) -> XYZ -> XYZ
 align (atom1, atom2, atom3) mol = mat2Coord mol mol_aligned
     where

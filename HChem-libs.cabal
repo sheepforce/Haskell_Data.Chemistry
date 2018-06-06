@@ -1,5 +1,5 @@
 name: HChem-libs
-version: 0.2
+version: 0.3
 cabal-version: >=1.2
 build-type: Simple
 license: GPL-3
@@ -12,10 +12,11 @@ author: Phillip Seeber
 library
     exposed-modules:
         Data.Chemistry.XYZ
-        Data.Chemistry.BasisSet
         Data.Chemistry.Wavefunction
         Data.Chemistry.Molden
         Data.Chemistry.BasisOptimisation
+        Data.Chemistry.Types
+        Data.Chemistry.Parser
     build-depends:
         base -any,
         attoparsec -any,
