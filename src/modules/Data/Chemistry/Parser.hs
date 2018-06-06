@@ -37,10 +37,11 @@ xyzParser = do
   --coordinates <- many' xyzCoordLineParser
   coordinates <- count nAtoms_parse xyzCoordLineParser
   -- _ <- endOfLine <|> endOfInput
-  return XYZ { _xyz_nAtoms = nAtoms_parse
-             , _xyz_comment = comment_parse
-             , _xyz_xyzcontent = coordinates
-             }
+  return XYZ
+    { _xyz_nAtoms = nAtoms_parse
+    , _xyz_comment = comment_parse
+    , _xyz_xyzcontent = coordinates
+    }
     where
       xyzCoordLineParser :: Parser (String,Double,Double,Double)
       xyzCoordLineParser = do
