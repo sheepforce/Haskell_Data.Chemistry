@@ -20,6 +20,7 @@ library
         base -any,
         attoparsec -any,
         text -any,
-        hmatrix >=0.18
+        hmatrix >=0.18,
+        microlens-platform >= 0.3.9.0
     hs-source-dirs: src/modules
     ghc-options: -Wall -O2

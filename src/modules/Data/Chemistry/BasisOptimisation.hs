@@ -26,7 +26,7 @@ getContrCoeff setOfBFs setOfMOs renorm molden
     | otherwise = error "trying to combine basis functions of different angular momentum"
     where
         -- for making sure no nonsensical combinations of basis functions were selected
-        angMomOfAllBFs = concat . map (map basfun_angular) . basfuns $ molden
+        angMomOfAllBFs = concat . map (map _basfun_angular) . _basfuns $ molden
         angMomOfSelBFs = [angMomOfAllBFs !! i | i <- setOfBFs]
 
         -- gives [[Double]], where outer layer is the MO, from which coefficients were determined
@@ -44,7 +44,7 @@ getContrCoeff_print :: Handle -> [Int] -> [Int] -> Bool -> Molden -> IO()
 getContrCoeff_print handle setOfBFs setOfMOs renorm molden = do
     -- calculate the contraction coefficients
     let contrCoeff = getContrCoeff setOfBFs setOfMOs renorm molden
-        angMomOfAllBFs = concat . map (map basfun_angular) . basfuns $ molden
+        angMomOfAllBFs = concat . map (map _basfun_angular) . _basfuns $ molden
         angMomOfSelBFs = [angMomOfAllBFs !! i | i <- setOfBFs]
         angMomOfSelBF = head angMomOfSelBFs
 

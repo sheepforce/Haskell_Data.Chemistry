@@ -1,13 +1,22 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Data.Chemistry.Wavefunction
 ( Spin(..)
 , PGTO
 , ContrCoeff
 , CGTO
 , BasFun(..)
+, basfun_angular
+, basfun_radial
 , AO(..)
+, ao_n
+, ao_l
+, ao_m
+, ao_r
 , MO
+, mixMOs
 ) where
 import qualified Numeric.LinearAlgebra as BLAS
+import Lens.Micro.Platform
 --import Data.Maybe
 
 {- ################ -}
@@ -28,9 +37,11 @@ type CGTO = [(PGTO,  ContrCoeff)]
 
 -- a basis function is described by the nebenquantenzahl l (angular momentum)
 -- and a radial function (CGTO)
-data BasFun = BasFun { basfun_angular :: Int
-                     , basfun_radial  :: CGTO
-                     } deriving Show
+data BasFun = BasFun
+  { _basfun_angular :: Int
+  , _basfun_radial  :: CGTO
+  } deriving Show
+makeLenses ''BasFun
 
 -- an atomic orbital is characterized by
 --   n = Hauptquantenzahl
@@ -38,11 +49,13 @@ data BasFun = BasFun { basfun_angular :: Int
 --   m = Magnetquantenzahl
 --   m_s = Spinquantenzahl
 --   the radial part from a CGTO
-data AO = AO { ao_n :: Int
-             , ao_l :: Int
-             , ao_m :: Int
-             , ao_r :: CGTO
-             } deriving Show
+data AO = AO
+  { _ao_n :: Int
+  , _ao_l :: Int
+  , _ao_m :: Int
+  , _ao_r :: CGTO
+  } deriving Show
+makeLenses ''AO
 
 -- a molecular orbital can be described by MO coefficients (LCAO coefficients)
 type MO = BLAS.Vector Double
