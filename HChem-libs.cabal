@@ -17,6 +17,7 @@ library
         Data.Chemistry.BasisOptimisation
         Data.Chemistry.Types
         Data.Chemistry.Parser
+        Data.Chemistry.Writer
     build-depends:
         base -any,
         attoparsec -any,
