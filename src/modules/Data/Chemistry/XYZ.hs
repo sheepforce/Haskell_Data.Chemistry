@@ -9,6 +9,9 @@ module Data.Chemistry.XYZ
 , mat2Coord
 , interpolate
 , align
+, findNeighboursOfType_Distance
+, distance
+, angle
 ) where
 import           Data.Chemistry.Parser
 import           Data.Chemistry.Types
@@ -112,3 +115,68 @@ align (atom1, atom2, atom3) mol = mat2Coord mol mol_aligned
 
         -- give the final rotated structure
         mol_aligned = mol_3toY0
+
+-- | get a XYZ file with all atoms of element "t" within distance "d" of the
+-- | "a"th atom in the xyz file "xyz"
+findNeighboursOfType_Distance :: Int -> String -> Double -> XYZ -> Maybe XYZ
+findNeighboursOfType_Distance a t d xyz
+  | a < length content && length allOfTypeWithinDistance > 0 = Just XYZ
+    { _xyz_nAtoms = length allOfTypeWithinDistance
+    , _xyz_comment = "all " ++ t ++ " within " ++ show d ++ " Angstrom of atom " ++ show a
+    , _xyz_xyzcontent = allOfTypeWithinDistance
+    }
+  | otherwise = Nothing
+  where
+    content = xyz ^. xyz_xyzcontent
+    aCoords = content !! a
+    allOfTypeWithinDistance =
+      filter (\i -> distance (r3Vec2hmVec . getCoord $ aCoords) (r3Vec2hmVec . getCoord $ i) <= d) .
+      filter (\(e, _, _, _) -> e == t) $
+      content
+
+
+{-
+started here to implement sorting function for wannier centres. Nevertheless,
+this is already in TRAVIS
+
+-- | Sort atoms in trajectory frames according to their distance. The atoms of
+-- | frame 2 are reshuffled to have minimal distance to the same type in frame 1
+sortTrajAtomsByDistance :: [XYZ] -> BLAS.Matrix Double --  [XYZ]
+sortTrajAtomsByDistance t =
+  f2fDistMat (coordsOfAllFrames !! 0) (coordsOfAllFrames !! 1)
+  where
+    nAtoms = getNAtoms . head $ t
+    coordsOfAllFrames = map coord2Mat t
+
+    f2fDistMat fA fB =
+      BLAS.fromLists
+      [
+        [ distance (fARows !! a) (fBRows !! b)
+        | b <- [ 0 .. nAtoms - 1 ]
+        ]
+      | a <- [ 0 .. nAtoms - 1 ]
+      ]
+      where
+        fARows = BLAS.toRows fA
+        fBRows = BLAS.toRows fB
+    shuffleMap =
+-}
+--------------------------------------------------------------------------------
+-- Math helper functions
+--------------------------------------------------------------------------------
+r3Vec2hmVec :: (Double, Double, Double) -> BLAS.Vector Double
+r3Vec2hmVec (a_x, a_y, a_z) = BLAS.fromList [a_x, a_y, a_z]
+
+vecLength :: BLAS.Vector Double -> Double
+vecLength = sqrt . sum . map (^2) . BLAS.toList
+
+-- | calculate the distance between two points
+distance :: BLAS.Vector Double -> BLAS.Vector Double -> Double
+distance a b = vecLength (a - b)
+
+-- | calculate angle between two vectors
+angle :: BLAS.Vector Double -> BLAS.Vector Double -> Double
+angle a b =
+  acos $
+  (a BLAS.<.> b) /
+  ((vecLength a) * (vecLength b))
