@@ -4,6 +4,7 @@ module Data.Chemistry.Parser
 , moldenParser
 , nwBasisParser
 , gmsBasisParser
+, numericalMatrixParser
 ) where
 import           Control.Applicative
 import           Data.Attoparsec.Text.Lazy
@@ -12,6 +13,8 @@ import           Data.Chemistry.Wavefunction
 import           Data.Maybe
 import qualified Data.Text                   as T
 import qualified Numeric.LinearAlgebra       as BLAS
+import Numeric.LinearAlgebra ((><))
+import Data.List
 
 
 -- | Make a parser optional, return Nothing if there is no match
@@ -536,3 +539,31 @@ gmsBasisParser = do
           coeff <- double
           _ <- many' (char ' ')
           return coeff
+
+
+--------------------------------------------------------------------------------
+-- Simple data formats
+--------------------------------------------------------------------------------
+-- | A simple parser for many fixed column data,
+numericalMatrixParser :: [Char] -> Parser (Maybe (BLAS.Matrix Double))
+numericalMatrixParser commentChar = do
+  _ <- many' commentLineParser
+  numLines <- many1 numLineParser
+  if (length . nub $ [length (numLines !! i) | i <- [0 .. length numLines - 1]]) /= 1
+    then return Nothing
+    else return $ Just $ ((length numLines) >< (length . head $ numLines)) (concat numLines)
+  where
+    commentLineParser = do
+      skipSpace
+      _ <- satisfy (`elem` commentChar)
+      commentLine <- manyTill anyChar endOfLine
+      return commentLine
+
+    numLineParser = do
+      _ <- many' (char ' ' <|> char '\t')
+      numLine <- many1 $ do
+        n <- double
+        _ <- many1 (satisfy (`elem` ";, \t"))
+        return n
+      endOfLine
+      return numLine
