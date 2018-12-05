@@ -18,6 +18,7 @@ library
         Data.Chemistry.Types
         Data.Chemistry.Parser
         Data.Chemistry.Writer
+        Data.Chemistry.Spectrum
     build-depends:
         base -any,
         attoparsec -any,

@@ -1,8 +1,8 @@
-{-# LANGUAGE TemplateHaskell #-}
 module Data.Chemistry.Wavefunction
 ( orb2AngMom
 , angMom2Orb
 , mixMOs
+, spinContaminationFractionOfHigherState
 ) where
 import           Data.Chemistry.Types
 import qualified Numeric.LinearAlgebra as BLAS
@@ -40,7 +40,7 @@ angMom2Orb angmom
 --------------------------------------------------------------------------------
 -- calculations on Wavefunction
 --------------------------------------------------------------------------------
--- give a list of weighted MOs and get back a new MO built of these and renormalized
+-- | give a list of weighted MOs and get back a new MO built of these and renormalized
 mixMOs :: [(Double, MO)] -> MO
 mixMOs lcl = newWMO
   where
@@ -51,3 +51,14 @@ mixMOs lcl = newWMO
     nBF = length . BLAS.toList . head $ mos
     zeroMO = BLAS.fromList $ replicate nBF 0.0 :: MO
     newWMO = foldr (\(c, m) acc -> BLAS.fromList [c] * m + acc) zeroMO rlcl
+
+
+--------------------------------------------------------------------------------
+-- Analysis of wavefunction
+--------------------------------------------------------------------------------
+-- | Get the fraction of the next higher spin state contributing to the current one from spin
+-- | contamination value
+spinContaminationFractionOfHigherState :: Floating a => a -> a -> a
+spinContaminationFractionOfHigherState pureS calcS2 =
+  (calcS2 - (pureS * (pureS + 1))) /
+  ((pureS + 1) * (pureS + 2))
