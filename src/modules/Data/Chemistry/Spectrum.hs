@@ -39,7 +39,7 @@ convolutionSum convFunc peaks grid = gridResult
 -- | The prefactor is taken from the Gaussian whitepaper, and the nominator multiplicator comes
 -- | from the prefactor expecting σ to be in cm^-1, but i give it in electron Volts instead
 oscStrength2Epsilon :: Floating a => a -> a -> a
-oscStrength2Epsilon fwhm fOsc = 1.30062974e8 * (fOsc) / (σ * 8065.54400545911)
+oscStrength2Epsilon fwhm fOsc = 1.3062974e8 * (fOsc) / (σ * 8065.54400545911)
   where
     σ = fwhm / (2 * sqrt(log 2))
 
