@@ -27,7 +27,7 @@ gauss fwhm (ePeak, fOsc) eEval = fOsc * exp(- ((eEval - ePeak) / σ)**2)
 -- |   peaks -> A list of pairs of (peak position in electron Volt, oscillator strength)
 -- |   grid -> A list of grid points (x-Values in electron Volt)
 -- | Result will be a list of (grid points in electron Volt, broadened oscillator strength at pos.)
-convolutionSum ::  Floating a => ((a, a)-> a -> a) -> [(a, a)] -> [a] -> [(a, a)]
+convolutionSum :: Floating a => ((a, a) -> a -> a) -> [(a, a)] -> [a] -> [(a, a)]
 convolutionSum convFunc peaks grid = gridResult
   where
     convFunc' grid' peaks' = convFunc peaks' grid'
@@ -39,7 +39,7 @@ convolutionSum convFunc peaks grid = gridResult
 -- | The prefactor is taken from the Gaussian whitepaper, and the nominator multiplicator comes
 -- | from the prefactor expecting σ to be in cm^-1, but i give it in electron Volts instead
 oscStrength2Epsilon :: Floating a => a -> a -> a
-oscStrength2Epsilon fwhm fOsc = 1.3062974e8 * (fOsc) / (σ * 8065.54400545911)
+oscStrength2Epsilon fwhm fOsc = 1.3062974e8 * fOsc / (σ * 8065.54400545911)
   where
     σ = fwhm / (2 * sqrt(log 2))
 
