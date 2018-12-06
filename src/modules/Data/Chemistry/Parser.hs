@@ -563,7 +563,7 @@ numericalMatrixParser commentChar = do
       _ <- many' (char ' ' <|> char '\t')
       numLine <- many1 $ do
         n <- double
-        _ <- many1 (satisfy (`elem` ";, \t"))
+        _ <- many' (satisfy (`elem` ";, \t"))
         return n
       endOfLine
       return numLine
